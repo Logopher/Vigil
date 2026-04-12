@@ -1,0 +1,50 @@
+{
+  "sandbox": {
+    "mode": "auto-allow",
+    "allowedDomains": [],
+    "allowUnsandboxedCommands": false
+  },
+  "permissions": {
+    "deny": [
+      "Bash(rm:*)",
+      "Bash(rm *)",
+      "Bash(git push*)",
+      "Bash(git pull*)",
+      "Bash(git fetch*)",
+      "Bash(git reset*)",
+      "Bash(git rebase*)",
+      "Bash(git merge*)",
+      "Bash(git clean*)",
+      "Bash(git restore*)",
+      "Bash(git stash drop*)",
+      "Bash(git stash pop*)",
+      "Bash(git checkout -- *)",
+      "Bash(curl*)",
+      "Bash(wget*)",
+      "Bash(node *)",
+      "Bash(python*)",
+      "Bash(npx*)",
+      "Bash(npm publish*)"
+    ]
+  },
+  "hooks": {
+    "SessionStart": [{
+        "type": "command",
+        "command": "bash ~/code/claude-config/prune-worktrees.sh",
+        "timeout": 15
+    }],
+    "SessionEnd": [{
+        "type": "command",
+        "command": "bash ~/code/claude-config/prune-worktrees.sh",
+        "timeout": 15
+    }],
+    "PreToolUse": [{
+      "matcher": "*",
+      "hooks": [{"type": "command", "command": "~/code/claude-config/log-tool-use.sh"}]
+    }],
+    "PostToolUse": [{
+      "matcher": "*", 
+      "hooks": [{"type": "command", "command": "~/code/claude-config/log-tool-result.sh"}]
+    }]
+  }
+}

@@ -68,6 +68,8 @@ check_file "policies/strict.json generated"         "$home/.config/claude-config
 check_file "policies/yolo.json copied"              "$home/.config/claude-config/policies/yolo.json"
 check_file "profile settings.json at ~/.claude"     "$home/.claude/settings.json"
 check_file "profile CLAUDE.md at ~/.claude"         "$home/.claude/CLAUDE.md"
+check_file "scripts/filter-sandbox-denies.py installed" \
+    "$home/.config/claude-config/scripts/filter-sandbox-denies.py"
 
 # Template source files should NOT appear in the install.
 if [[ -f "$home/.config/claude-config/policies/dev.template.json" ]]; then
@@ -123,6 +125,49 @@ if grep -q "$home/.claude/hooks/prune-worktrees.sh" "$home/.claude/settings.json
     pass "{{PROFILE_DIR}} substituted to ~/.claude in settings.json"
 else
     fail "{{PROFILE_DIR}} not substituted to ~/.claude in settings.json"
+fi
+
+# -----------------------------------------------------------------------------
+section "denyRead filtered to extant paths"
+# The ephemeral $HOME has none of the credential directories, so the
+# installer's filter pass should have dropped every denyRead entry.
+denyread_count=$(python3 -c "
+import json, sys
+with open('$home/.claude/settings.json') as f:
+    s = json.load(f)
+entries = s.get('sandbox', {}).get('filesystem', {}).get('denyRead', [])
+print(len(entries))
+")
+if [[ "$denyread_count" == "0" ]]; then
+    pass "all non-existent denyRead entries filtered out"
+else
+    fail "expected 0 denyRead entries in ephemeral \$HOME (got $denyread_count)"
+fi
+
+# Positive case: pre-create ~/.ssh as a real directory so one entry survives;
+# pre-create ~/.aws as a symlink so it is dropped (the bwrap-incompatible
+# case discovered in production).
+home=$(mktmp)
+mkdir -p "$home/.ssh"
+mkdir -p "$home/aws-target"
+ln -s "$home/aws-target" "$home/.aws"
+install_into "$home"
+remaining=$(python3 -c "
+import json
+with open('$home/.claude/settings.json') as f:
+    s = json.load(f)
+entries = s.get('sandbox', {}).get('filesystem', {}).get('denyRead', [])
+print('\n'.join(entries))
+")
+if grep -q "$home/.ssh" <<< "$remaining"; then
+    pass "real directory retained in denyRead"
+else
+    fail "pre-existing ~/.ssh should be in denyRead (got: $remaining)"
+fi
+if grep -q "$home/.aws" <<< "$remaining"; then
+    fail "symlinked ~/.aws should have been filtered out (bwrap-incompatible)"
+else
+    pass "symlinked path filtered from denyRead"
 fi
 
 # -----------------------------------------------------------------------------
@@ -186,6 +231,18 @@ if [[ "$rc" != "0" ]]; then
     pass "installer refuses when profiles/default exists"
 else
     fail "expected refusal on pre-existing profiles/default"
+fi
+
+# -----------------------------------------------------------------------------
+section "Refusal: scripts/ already exists"
+home=$(mktmp)
+mkdir -p "$home/.config/claude-config/scripts"
+out=$(install_capture "$home")
+rc=$(printf '%s\n' "$out" | head -1)
+if [[ "$rc" != "0" ]]; then
+    pass "installer refuses when scripts/ exists"
+else
+    fail "expected refusal on pre-existing scripts/"
 fi
 
 # -----------------------------------------------------------------------------

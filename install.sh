@@ -61,6 +61,7 @@ check_path() {
 check_path "$CLAUDE_DIR"
 check_path "$DEST_DIR/claude-aliases.sh"
 check_path "$DEST_DIR/profiles/default"
+check_path "$DEST_DIR/scripts"
 
 for src in "$REPO_DIR/policies/"*; do
     fname="$(basename "$src")"
@@ -90,9 +91,17 @@ fi
 # -----------------------------------------------------------------------------
 # Install.
 
-mkdir -p "$DEST_DIR/policies" "$DEST_DIR/profiles" "$CLAUDE_DIR"
+mkdir -p "$DEST_DIR/policies" "$DEST_DIR/profiles" "$DEST_DIR/scripts" "$CLAUDE_DIR"
 
 cp "$REPO_DIR/claude-aliases.sh" "$DEST_DIR/claude-aliases.sh"
+
+# Management scripts the user can invoke later (e.g., after installing
+# a tool that creates new credential paths they want denied).
+for src in "$REPO_DIR/scripts/"*; do
+    cp "$src" "$DEST_DIR/scripts/"
+done
+chmod +x "$DEST_DIR/scripts/"*.py 2>/dev/null || true
+chmod +x "$DEST_DIR/scripts/"*.sh 2>/dev/null || true
 
 for src in "$REPO_DIR/policies/"*; do
     fname="$(basename "$src")"
@@ -123,6 +132,12 @@ done
 for hook in "$CLAUDE_DIR/hooks/"*.sh; do
     chmod +x "$hook"
 done
+
+# Filter sandbox.filesystem.denyRead to paths that currently exist.
+# Bubblewrap requires each tmpfs-mount target to exist; a missing entry
+# causes sandbox init to fail closed for every subprocess. See
+# scripts/filter-sandbox-denies.py for details.
+python3 "$DEST_DIR/scripts/filter-sandbox-denies.py" "$CLAUDE_DIR/settings.json"
 
 # Convenience symlink: lets users and docs reference the default profile
 # at the same path as other (hypothetical) profiles under profiles/.

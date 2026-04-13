@@ -90,6 +90,13 @@ Changes to any CLAUDE.md file require explicit developer instruction.
 
 ### Agent-gate workflow
 
+Specialist agents live in `.claude/agents/`. Invoke them explicitly by name.
+
+| Agent | File | When to use |
+|---|---|---|
+| `architect` | `.claude/agents/architect.md` | Non-trivial changes; preserves load-bearing invariants and installer contracts. |
+| `code-reviewer` | `.claude/agents/code-reviewer.md` | Before every commit; emphasizes shell, JSON settings, and installer concerns. |
+
 For non-trivial changes:
 
 1. Invoke `architect` — produce a written plan; do not write code yet.
@@ -99,5 +106,3 @@ For non-trivial changes:
 5. Commit only after gates pass.
 
 For small isolated fixes (single-file, no interface changes), steps 1–2 may be skipped at the developer's discretion.
-
-The `code-reviewer` for this repo emphasizes shell-script concerns (quoting, `set -e` behavior, MSYS2/WSL path handling), Claude Code settings invariants (allow/deny precedence, dual matcher coverage, hook path resolution), and the load-bearing invariants called out elsewhere in this file.

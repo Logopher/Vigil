@@ -27,10 +27,16 @@ To change the desired deny set, edit MASTER_DENY_READ / MASTER_DENY_WRITE
 in this file. Whatever is present in the target JSON is ignored as
 input; this script is authoritative.
 
-Usage: filter-sandbox-denies.py [settings.json]
+Usage: filter-sandbox-denies.py [--check] [settings.json]
 
 Default target is ~/.claude/settings.json. Exits non-zero if the target
 does not exist.
+
+With --check the script does not modify the JSON. It computes what the
+denyRead/denyWrite arrays *would* be after a normal run and compares
+against what is currently in the file. Exit 0 if they already match,
+1 if they differ (i.e. a real run would change something). Intended
+for use by health-check tooling like doctor.sh.
 """
 import json
 import os
@@ -96,11 +102,23 @@ def build(master: tuple[str, ...]) -> tuple[list[str], list[tuple[str, str]]]:
 
 
 def main(argv):
-    if len(argv) > 2:
-        print(f"usage: {argv[0]} [settings.json]", file=sys.stderr)
+    args = argv[1:]
+    check_only = False
+    positional: list[str] = []
+    for a in args:
+        if a == "--check":
+            check_only = True
+        elif a.startswith("-"):
+            print(f"usage: {argv[0]} [--check] [settings.json]", file=sys.stderr)
+            return 2
+        else:
+            positional.append(a)
+
+    if len(positional) > 1:
+        print(f"usage: {argv[0]} [--check] [settings.json]", file=sys.stderr)
         return 2
 
-    target = argv[1] if len(argv) > 1 else os.path.expanduser("~/.claude/settings.json")
+    target = positional[0] if positional else os.path.expanduser("~/.claude/settings.json")
 
     if not os.path.isfile(target):
         print(f"filter-sandbox-denies: {target} does not exist.", file=sys.stderr)
@@ -115,12 +133,30 @@ def main(argv):
     keys = (("denyRead", MASTER_DENY_READ), ("denyWrite", MASTER_DENY_WRITE))
     all_dropped: list[tuple[str, str, str]] = []
     summary_parts: list[str] = []
+    drift = False
+    new_arrays: list[tuple[str, list[str]]] = []
     for key, master in keys:
         kept, dropped = build(master)
-        filesystem[key] = kept
+        current = list(filesystem.get(key, []))
+        if current != kept:
+            drift = True
+        new_arrays.append((key, kept))
         summary_parts.append(f"{key}: {len(kept)}/{len(master)} kept")
         for entry, reason in dropped:
             all_dropped.append((key, entry, reason))
+
+    if check_only:
+        prefix = "filter-sandbox-denies --check: "
+        if drift:
+            print(prefix + "drift detected; a real run would change settings.json.")
+        else:
+            print(prefix + "in sync; " + "; ".join(summary_parts) + ".")
+        for key, entry, reason in all_dropped:
+            print(f"  would drop {key}: {entry}  ({reason})")
+        return 1 if drift else 0
+
+    for key, kept in new_arrays:
+        filesystem[key] = kept
 
     tmp = target + ".tmp"
     with open(tmp, "w") as f:

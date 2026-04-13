@@ -2,6 +2,16 @@
 
 Personal Claude Code configuration, designed to also be deployed to other machines.
 
+## Who this is for
+
+**Sweet spot.** A mid-to-senior developer comfortable in a Linux/WSL2/macOS terminal, security-aware enough to want a baseline for autonomous agents but uninterested in designing one from scratch. The split between profile (identity, hooks, sandbox) and policy (posture: `strict` / `dev` / `yolo`) should click quickly — it mirrors AWS profiles, browser profiles, and IAM policies.
+
+**Above the sweet spot.** Senior developers with their own opinionated Claude config. Welcome to fork, steal ideas, or politely ignore.
+
+**Outside current scope.** Users without terminal proficiency; native Windows users without WSL (installer is bash-only); anyone unfamiliar with `~/.claude/settings.json` — whether they reach Claude through the desktop app, an IDE extension, or the CLI is irrelevant, but the tool's value depends on knowing *what configuration is* and being willing to manage it.
+
+For the longer framing — including common misconceptions, the self-use vs. friend-deploy split, and a practical "is this for me?" test — see [`AUDIENCE.md`](AUDIENCE.md).
+
 ## Installation
 
 Clone this repo anywhere, then run the installer:

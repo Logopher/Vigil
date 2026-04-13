@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""Filter sandbox.filesystem.denyRead entries in a settings.json to paths
-bubblewrap can actually mount over.
+"""Filter sandbox.filesystem.denyRead and denyWrite entries in a
+settings.json to paths bubblewrap can actually mount over.
 
 Bubblewrap requires each tmpfs/bind target to be a real directory or file
 on the host filesystem. The following entries cause sandbox init to fail
@@ -18,8 +18,8 @@ does:
 
 This filter is one-way: entries that don't pass the type check at run
 time are dropped. Paths that appear later (e.g., a real ~/.aws/ created
-by installing AWS CLI) require re-running the installer to be
-reintroduced.
+by installing AWS CLI, or ~/.local/bin created by a pip --user install)
+require re-running the installer to be reintroduced.
 
 Usage: filter-sandbox-denies.py [settings.json]
 
@@ -61,30 +61,30 @@ def main(argv):
     with open(target) as f:
         settings = json.load(f)
 
-    entries = (
-        settings
-        .get("sandbox", {})
-        .get("filesystem", {})
-        .get("denyRead", None)
-    )
-    if entries is None:
+    filesystem = settings.get("sandbox", {}).get("filesystem", {})
+    keys = [k for k in ("denyRead", "denyWrite") if k in filesystem]
+    if not keys:
         print(
-            "filter-sandbox-denies: no sandbox.filesystem.denyRead in "
-            f"{target}; nothing to filter.",
+            "filter-sandbox-denies: no sandbox.filesystem.denyRead or "
+            f"denyWrite in {target}; nothing to filter.",
             file=sys.stderr,
         )
         return 0
 
-    kept = []
-    dropped = []  # list of (entry, reason)
-    for entry in entries:
-        keep, reason = evaluate(entry)
-        if keep:
-            kept.append(entry)
-        else:
-            dropped.append((entry, reason))
-
-    settings["sandbox"]["filesystem"]["denyRead"] = kept
+    total = 0
+    kept_total = 0
+    dropped = []  # list of (key, entry, reason)
+    for key in keys:
+        kept = []
+        for entry in filesystem[key]:
+            total += 1
+            keep, reason = evaluate(entry)
+            if keep:
+                kept.append(entry)
+                kept_total += 1
+            else:
+                dropped.append((key, entry, reason))
+        filesystem[key] = kept
 
     tmp = target + ".tmp"
     with open(tmp, "w") as f:
@@ -93,11 +93,11 @@ def main(argv):
     os.replace(tmp, target)
 
     print(
-        f"filter-sandbox-denies: {len(entries)} entries total; "
-        f"{len(kept)} kept, {len(dropped)} dropped."
+        f"filter-sandbox-denies: {total} entries total across "
+        f"{', '.join(keys)}; {kept_total} kept, {len(dropped)} dropped."
     )
-    for entry, reason in dropped:
-        print(f"  dropped: {entry}  ({reason})")
+    for key, entry, reason in dropped:
+        print(f"  dropped {key}: {entry}  ({reason})")
     return 0
 
 

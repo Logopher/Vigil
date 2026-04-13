@@ -47,6 +47,15 @@ rmdir /tmp/claude-state
 
 The clumsiness is deliberate. A friendlier workflow belongs in a future `update.sh` that knows which files are "ours" versus Claude Code's; designing that safely is tracked as a Stage 1 gap.
 
+## Uninstalling
+
+```
+cd ~/code/claude-config
+./uninstall.sh        # interactive; pass -y to skip the prompt
+```
+
+The script removes only files placed by `install.sh` and leaves Claude Code runtime state in `~/.claude/` (credentials, sessions, history, projects, etc.) intact. User-added files under `~/.claude/agents/` and `~/.claude/hooks/` are also preserved — only entries that originated from this repo are removed.
+
 ## Profiles and policies
 
 - The **default profile** is safe by construction — plan mode, a hard deny list, hooks, and sandbox rules. It lives at `~/.claude/` and applies to any Claude Code session.

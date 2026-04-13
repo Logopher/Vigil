@@ -51,14 +51,14 @@ Changes to any CLAUDE.md file require explicit developer instruction.
 
 ### Agent-gate workflow
 
-Specialist agents live in `.claude/agents/`. Invoke them explicitly by name.
+Specialist agents ship with the default profile at `~/.claude/agents/`. Projects may define additional specialist reviewers in their own `.claude/agents/`.
 
-| Agent | When to use |
-|---|---|
-| `architect` | New features, cross-component changes, any decision affecting structure |
-| `code-reviewer` | After implementation, before every commit |
+| Agent | File | When to use |
+|---|---|---|
+| `architect` | `~/.claude/agents/architect.md` | New features, cross-component changes, any decision affecting structure |
+| `code-reviewer` | `~/.claude/agents/code-reviewer.md` | After implementation, before every commit |
 
-Projects may define additional specialist reviewers (accessibility, SEO, security, etc.) in their own `.claude/agents/`. When present, invoke them as applicable before committing.
+When project-specific reviewers (accessibility, SEO, security, etc.) exist, invoke them as applicable before committing.
 
 For non-trivial changes:
 

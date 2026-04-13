@@ -104,3 +104,11 @@ Two signals together cross the threshold. One signal alone is usually premature.
 - One agent doing both planning and review.
 - Agents created for hypothetical future needs.
 - Agents whose checklist overlaps 80% with another agent's.
+
+## Operational notes
+
+Signals from the environment that look anomalous but are expected. Do not investigate these or treat them as bugs — recognize them and move on.
+
+### Sandbox artifacts
+
+If the session runs inside a sandbox, the harness may mask certain paths (user dotfiles, editor state, some `.claude/` config files) by bind-mounting `/dev/null` over them. These appear as character devices (`crw-rw-rw-`, owner `nobody:nogroup`, major/minor `1,3`) and show up in `git status` as untracked. They cannot be committed — git rejects character devices. No `.gitignore` entry is needed or appropriate; they are not repository state.

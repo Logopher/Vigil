@@ -10,8 +10,12 @@
 # the backup — the -n flag means freshly installed files always win,
 # so the backup only fills gaps (user additions, runtime state).
 #
-# On clean exit the backup is removed. On failure it is preserved
-# and its path is printed so the operator can recover manually.
+# On clean exit the backup is removed. On failure after the backup
+# has been populated, we auto-rollback: wipe whatever install.sh left
+# behind (it is partial/broken by assumption) and copy the backup
+# back verbatim, restoring the pre-update state. Only if the rollback
+# itself fails do we fall back to preserving the backup at its tempdir
+# path and printing that path for manual recovery.
 set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -55,9 +59,48 @@ backup_dir="$(mktemp -d)"
 # is empty, so any failure (e.g., uninstall.sh exits non-zero) should
 # silently clean it up rather than print a misleading "preserved" path.
 keep_backup=0
+
+# Restore the live dirs from $backup_dir. Called from the EXIT trap
+# when a failure occurs after the backup has been populated. Wipes
+# whatever install.sh partially wrote (broken by assumption) and
+# copies the backup back verbatim. Disables errexit for the duration
+# so a single cp/rm hiccup doesn't abort mid-rollback; returns
+# non-zero if any step fails so the trap can fall back to preserving
+# the backup.
+#
+# Narrow caveat: `keep_backup` is set to 1 before move_contents, so a
+# mid-move_contents failure (mv of the entry list partially succeeds)
+# could leave live-dir entries neither in the backup nor recoverable
+# by rollback. Accepted: mv-of-entries-at-once is atomic enough in
+# practice that closing this window is not worth the complexity.
+rollback() {
+    set +e
+    local rc=0 dir
+    shopt -s nullglob dotglob
+    for dir in "$CLAUDE_DIR" "$DEST_DIR"; do
+        if [[ -d "$dir" ]]; then
+            local entries=("$dir"/*)
+            if (( ${#entries[@]} > 0 )); then
+                rm -rf -- "${entries[@]}" || rc=1
+            fi
+        else
+            mkdir -p "$dir" || rc=1
+        fi
+    done
+    shopt -u nullglob dotglob
+    cp -r -- "$backup_dir/claude/." "$CLAUDE_DIR/" || rc=1
+    cp -r -- "$backup_dir/config/." "$DEST_DIR/"   || rc=1
+    return $rc
+}
+
 on_exit() {
     if [[ $keep_backup -eq 1 ]]; then
-        echo "update.sh: error encountered; backup preserved at $backup_dir" >&2
+        if rollback; then
+            rm -rf "$backup_dir"
+            echo "update.sh: update aborted; rolled back to pre-update state" >&2
+        else
+            echo "update.sh: error encountered AND rollback failed; backup preserved at $backup_dir" >&2
+        fi
     else
         rm -rf "$backup_dir"
     fi

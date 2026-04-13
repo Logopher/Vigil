@@ -139,13 +139,15 @@ update_into "$home"
 check_contents "skills/foo.md" "$home/.claude/skills/foo.md" "skill body"
 
 # -----------------------------------------------------------------------------
-section "Failure path preserves backup tempdir"
+section "Failure path auto-rolls back to pre-update state"
 home=$(mktmp)
 install_into "$home"
 echo "marker" > "$home/.claude/.credentials.json"
+mkdir -p "$home/.claude/sessions"
+echo "session-data" > "$home/.claude/sessions/abc.log"
 # Shim python3 → false on PATH so install.sh fails at the
-# filter-sandbox-denies step. update.sh's trap should preserve the
-# backup and surface its path on stderr.
+# filter-sandbox-denies step. update.sh's trap should rollback to
+# the pre-update state and remove the backup.
 shimdir=$(mktmp)
 cat > "$shimdir/python3" <<'SHIM'
 #!/usr/bin/env bash
@@ -162,18 +164,22 @@ else
     fail "update unexpectedly succeeded with broken python3"
 fi
 
-backup_path=$(sed -n 's/.*backup preserved at \(.*\)$/\1/p' <<<"$out" | head -1)
-if [[ -n "$backup_path" && -d "$backup_path" ]]; then
-    pass "backup preserved: $backup_path"
-    if [[ -f "$backup_path/claude/.credentials.json" ]]; then
-        pass "seeded credentials present in backup"
-    else
-        fail "seeded credentials missing from backup"
-    fi
-    rm -rf -- "$backup_path"
+if grep -q 'update aborted; rolled back' <<<"$out"; then
+    pass "rollback message surfaced"
 else
-    fail "no backup path printed or path missing (out=$out)"
+    fail "expected 'update aborted; rolled back' in output (out=$out)"
 fi
+
+if ! grep -q 'backup preserved at' <<<"$out"; then
+    pass "no stray backup-preserved message on successful rollback"
+else
+    fail "unexpected 'backup preserved at' on successful rollback (out=$out)"
+fi
+
+check_contents "credentials restored after rollback" \
+    "$home/.claude/.credentials.json" "marker"
+check_contents "session data restored after rollback" \
+    "$home/.claude/sessions/abc.log" "session-data"
 
 # -----------------------------------------------------------------------------
 section "-y skips prompt"

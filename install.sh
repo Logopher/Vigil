@@ -60,6 +60,7 @@ check_path() {
 
 check_path "$CLAUDE_DIR"
 check_path "$DEST_DIR/claude-aliases.sh"
+check_path "$DEST_DIR/doctor.sh"
 check_path "$DEST_DIR/profiles/default"
 check_path "$DEST_DIR/scripts"
 
@@ -94,6 +95,8 @@ fi
 mkdir -p "$DEST_DIR/policies" "$DEST_DIR/profiles" "$DEST_DIR/scripts" "$CLAUDE_DIR"
 
 cp "$REPO_DIR/claude-aliases.sh" "$DEST_DIR/claude-aliases.sh"
+cp "$REPO_DIR/doctor.sh" "$DEST_DIR/doctor.sh"
+chmod +x "$DEST_DIR/doctor.sh"
 
 # Management scripts the user can invoke later (e.g., after installing
 # a tool that creates new credential paths they want denied).
@@ -161,4 +164,7 @@ at $DEST_DISPLAY/profiles/default points to it.
 
 If not already sourcing from your shell rc, add:
   [ -f $DEST_DISPLAY/claude-aliases.sh ] && source $DEST_DISPLAY/claude-aliases.sh
+
+To verify the install at any time:
+  $DEST_DISPLAY/doctor.sh
 MSG

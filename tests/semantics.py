@@ -120,8 +120,8 @@ def check_yolo_guards(yolo: dict) -> None:
 
 def check_allow_deny_noncontradiction(profile: dict, policies: list[tuple[str, dict]]) -> None:
     section("No policy allow conflicts with profile deny (exact-string)")
-    # Exact-string only. Glob-aware subsumption (e.g., allow "Bash(git:*)"
-    # vs profile-deny "Bash(git push:*)") is tracked in BACKLOG.md.
+    # Exact-string only. Glob-aware subsumption (dead-rule detection) is
+    # handled separately in check_allow_deny_dead_rules.
     pdeny = set(deny_of(profile))
     for name, policy in policies:
         conflicts = [a for a in allow_of(policy) if a in pdeny]
@@ -147,6 +147,103 @@ def check_deep_merge(profile: dict, policies: list[tuple[str, dict]]) -> None:
             pass_(f"{name}: merges with profile retaining all top-level keys")
         else:
             fail(f"{name}: merged result missing keys: {' '.join(missing)}")
+
+
+def _path_pattern_to_regex(pat: str) -> re.Pattern:
+    # `**` → any subtree (including slashes); `*` → single path segment.
+    # All other characters are treated as literals.
+    out: list[str] = []
+    i = 0
+    while i < len(pat):
+        if pat[i:i + 2] == "**":
+            out.append(".*")
+            i += 2
+        elif pat[i] == "*":
+            out.append("[^/]*")
+            i += 1
+        else:
+            out.append(re.escape(pat[i]))
+            i += 1
+    return re.compile("^" + "".join(out) + "$")
+
+
+def _normalize_matcher(entry: str):
+    """Return a structured form of a matcher, or None if unrecognized.
+
+    Shapes returned:
+      ("bash", tokens: tuple[str, ...], is_prefix: bool)
+      ("path", tool: str, glob: str)
+    """
+    m = MATCHER_RE.match(entry)
+    if not m:
+        return None
+    tool, arg = m.group(1), m.group(2)
+    if tool == "Bash":
+        if arg.endswith(":*"):
+            return ("bash", tuple(arg[:-2].split()), True)
+        return ("bash", tuple(arg.split()), False)
+    if tool in PATH_TOOLS:
+        return ("path", tool, arg)
+    return None
+
+
+def _strictly_subsumes(a, b) -> bool:
+    """True iff every invocation matching b also matches a, and a is strictly broader.
+
+    Approximation, not a full glob-intersection solver. For paths, treats
+    each pattern as a literal string when testing against the other's
+    regex; if both regexes match, classifies as equivalent (not strict) so
+    neither side is flagged. Sufficient for the subsumption class the
+    shipped policies can plausibly ship.
+    """
+    if a[0] != b[0]:
+        return False
+    if a[0] == "bash":
+        _, a_toks, a_prefix = a
+        _, b_toks, _ = b
+        if not a_prefix:
+            return False
+        if len(a_toks) >= len(b_toks):
+            return False
+        return b_toks[:len(a_toks)] == a_toks
+    # path
+    if a[1] != b[1]:
+        return False
+    ra = _path_pattern_to_regex(a[2])
+    rb = _path_pattern_to_regex(b[2])
+    a_covers_b = bool(ra.match(b[2]))
+    b_covers_a = bool(rb.match(a[2]))
+    return a_covers_b and not b_covers_a
+
+
+def check_allow_deny_dead_rules(profile: dict, policies: list[tuple[str, dict]]) -> None:
+    section("No policy allow/ask pattern is subsumed by a profile deny (dead rule)")
+    # Runtime precedence is deny > ask > allow, so an allow or ask whose
+    # match set is contained in a profile deny's match set can never fire.
+    # Allow/ask strictly *broader* than a deny is legitimate layering (the
+    # overlap is denied, the rest is allowed/asked) and is not flagged.
+    # Scope: checks policy allow/ask against profile deny only; intra-policy
+    # self-shadowing (allow vs. same policy's deny) is out of scope here.
+    pdeny_normalized: list[tuple[tuple, str]] = []
+    for entry in deny_of(profile):
+        n = _normalize_matcher(entry)
+        if n is not None:
+            pdeny_normalized.append((n, entry))
+    for name, policy in policies:
+        conflicts: list[tuple[str, str, str]] = []
+        for bucket, entries in (("allow", allow_of(policy)), ("ask", ask_of(policy))):
+            for entry in entries:
+                na = _normalize_matcher(entry)
+                if na is None:
+                    continue
+                for nd, d_entry in pdeny_normalized:
+                    if _strictly_subsumes(nd, na):
+                        conflicts.append((bucket, entry, d_entry))
+        if not conflicts:
+            pass_(f"{name}: no allow/ask entries shadowed by a profile deny")
+        else:
+            for bucket, a_entry, d_entry in conflicts:
+                fail(f"{name}: {bucket} '{a_entry}' is dead — shadowed by profile deny '{d_entry}'")
 
 
 def check_path_representation(profile: dict, policies: list[tuple[str, dict]]) -> None:
@@ -197,6 +294,7 @@ def main() -> int:
     check_dev_superset(profile, dev)
     check_yolo_guards(yolo)
     check_allow_deny_noncontradiction(profile, policies)
+    check_allow_deny_dead_rules(profile, policies)
     check_path_representation(profile, policies)
     check_deep_merge(profile, policies)
 

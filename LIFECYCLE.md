@@ -2,7 +2,7 @@
 
 **Current stage: 0, preparing for 1.**
 
-This document describes the stages `claude-config` is expected to pass through over its life, what each stage demands of the maintainer, and the transitions between them. It is the whole-arc view. For how the project works today, see `DESIGN.md`. For the specific next step, see `ROADMAP.md` (when it exists).
+This document describes the stages `claude-config` is expected to pass through over its life, what each stage demands of the maintainer, and the transitions between them. It is the whole-arc view. For how the project works today, see `DESIGN.md`.
 
 Update the "current stage" line above when the project moves.
 
@@ -156,7 +156,6 @@ Two shapes the project should avoid:
 - When the current stage changes, update the pointer at the top.
 - When a new demand or anti-goal is recognized at any stage, add it here rather than scattering the insight across commit messages and issues.
 - When a transition is attempted, review its "failure mode" line first. If the failure mode is already visible, pause and fix it before continuing.
-- `ROADMAP.md` should cite stages from this document by number rather than redefining them.
 
 ---
 

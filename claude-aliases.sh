@@ -81,3 +81,77 @@ claude-dev() {
         _claude_run_with_logging --settings "$HOME/.config/claude-config/policies/dev.json" "$@"
     )
 }
+
+claude-strict() {
+    _claude_run_with_logging --settings "$HOME/.config/claude-config/policies/strict.json" "$@"
+}
+
+claude-yolo() {
+    _claude_run_with_logging --settings "$HOME/.config/claude-config/policies/yolo.json" "$@"
+}
+
+# Open a session transcript in $PAGER. With no args, opens the most
+# recent. With -N (e.g., -1), opens the transcript that many positions
+# back from newest: -1 is the previous session, -2 the one before that.
+# With a date-prefix string (e.g., 20260413 or 2026-04-13), opens the
+# first transcript whose timestamp starts with that prefix; dashes are
+# stripped before matching since session filenames use compact
+# YYYYMMDD-HHMMSS form.
+#
+# Sorting relies on session filenames being fixed-width and lex-sortable
+# the same as chronologically — keep in sync with the session-filename
+# format used by _claude_run_with_logging above.
+claude-log() {
+    local logdir="$HOME/claude-logs"
+    local pager="${PAGER:-less}"
+    local arg="${1:-}"
+
+    shopt -s nullglob
+    local all=("$logdir"/session-*.txt)
+    shopt -u nullglob
+
+    if [[ ${#all[@]} -eq 0 ]]; then
+        echo "claude-log: no transcripts in $logdir" >&2
+        return 1
+    fi
+
+    # Reverse to newest-first; filenames (session-YYYYMMDD-HHMMSS.txt)
+    # sort lexicographically the same as chronologically.
+    local files=()
+    local i
+    for ((i=${#all[@]}-1; i>=0; i--)); do
+        files+=("${all[$i]}")
+    done
+
+    local target=""
+    if [[ -z "$arg" ]]; then
+        target="${files[0]}"
+    elif [[ "$arg" =~ ^-[0-9]+$ ]]; then
+        local idx="${arg#-}"
+        if (( idx >= ${#files[@]} )); then
+            echo "claude-log: only ${#files[@]} transcript(s) available" >&2
+            return 1
+        fi
+        target="${files[$idx]}"
+    else
+        local query="${arg//-/}"
+        local f base stamp
+        for f in "${files[@]}"; do
+            base="$(basename "$f")"
+            stamp="${base#session-}"
+            stamp="${stamp%.txt}"
+            if [[ "$stamp" == "$query"* ]]; then
+                target="$f"
+                break
+            fi
+        done
+        if [[ -z "$target" ]]; then
+            echo "claude-log: no transcript matching '$arg'" >&2
+            return 1
+        fi
+    fi
+
+    # eval lets multi-word PAGER values work (e.g., PAGER="less -R").
+    # Target is shell-quoted to survive paths with spaces.
+    eval "$pager $(printf '%q' "$target")"
+}

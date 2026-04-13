@@ -29,7 +29,7 @@ The installer copies into two locations:
 
 The installer **refuses to run if any destination already exists**, including a prior `~/.claude`, any existing alias or policy file, or a prior `profiles/default`. There is no `--force` flag. Re-installation requires manual cleanup first — this is intentional, because `~/.claude` may contain Claude Code runtime state (credentials, sessions, history) that the installer will not preserve for you.
 
-Add to your `~/.bashrc` (or equivalent) so the `claude` and `claude-dev` wrapper functions are defined, sessions are recorded under `~/claude-logs/`, and `CLAUDE_SESSION_ID` / `CLAUDE_LOG_DIR` are exported for the logging hooks:
+Add to your `~/.bashrc` (or equivalent) so the `claude`, `claude-dev`, `claude-strict`, `claude-yolo`, and `claude-log` wrapper functions are defined and sessions are recorded under `~/claude-logs/`:
 
 ```
 [ -f ~/.config/claude-config/claude-aliases.sh ] && source ~/.config/claude-config/claude-aliases.sh
@@ -69,15 +69,16 @@ The script removes only files placed by `install.sh` and leaves Claude Code runt
 ## Profiles and policies
 
 - The **default profile** is safe by construction — plan mode, a hard deny list, hooks, and sandbox rules. It lives at `~/.claude/` and applies to any Claude Code session.
-- **Policies** are permission overlays selected per session via `--settings`:
+- **Policies** are permission overlays selected per session via `--settings`. Shell wrappers in `claude-aliases.sh` save the typing:
 
-  ```
-  claude --settings ~/.config/claude-config/policies/dev.json     # uninterrupted dev work, safety gates on risky ops
-  claude --settings ~/.config/claude-config/policies/strict.json  # same as the default profile baseline
-  claude --settings ~/.config/claude-config/policies/yolo.json    # bypass confirmations (retains rm and sudo denies)
-  ```
+  | Wrapper | Equivalent | Notes |
+  |---|---|---|
+  | `claude` | bare `claude` | default profile baseline; plan mode; session logging via `script(1)` |
+  | `claude-dev` | `claude --settings .../policies/dev.json` | cd to git root, uninterrupted dev work, safety gates on risky ops |
+  | `claude-strict` | `claude --settings .../policies/strict.json` | same as the default profile baseline, made explicit |
+  | `claude-yolo` | `claude --settings .../policies/yolo.json` | bypasses confirmations; retains `rm` and `sudo` denies |
 
-- For project-scoped dev sessions (cd to git root, apply the `dev` policy, session logging), use the `claude-dev` shell function defined in `claude-aliases.sh`.
+- `claude-log` opens a session transcript in `$PAGER`. With no arguments it shows the most recent session; `claude-log -1` shows the previous one (`-2` the one before that, etc.); `claude-log 20260413` (or `2026-04-13`) opens the first transcript with that date prefix.
 
 ## Further reading
 

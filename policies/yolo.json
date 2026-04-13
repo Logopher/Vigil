@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "defaultMode": "bypassPermissions",
+    "deny": [
+      "Bash(rm:*)",
+      "Bash(sudo:*)"
+    ]
+  }
+}

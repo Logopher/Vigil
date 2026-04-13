@@ -22,6 +22,15 @@ _claude_run_with_logging() {
             script -B "$logfile" -c "command claude $*"
             ;;
     esac
+
+    # Post-process the raw script(1) capture into a readable .txt
+    # transcript alongside it. The .log keeps full TTY fidelity for
+    # replay; the .txt is for actual reading and grep-ability.
+    local stripper="$HOME/.config/claude-config/scripts/strip-ansi.py"
+    if [[ -f "$stripper" && -f "$logfile" ]] && command -v python3 >/dev/null 2>&1; then
+        python3 "$stripper" "$logfile" "${logfile%.log}.txt" 2>/dev/null || true
+    fi
+
     unset CLAUDE_SESSION_ID CLAUDE_LOG_DIR
 }
 

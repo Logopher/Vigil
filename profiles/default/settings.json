@@ -39,7 +39,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/home/grault/code/claude-config/hooks/prune-worktrees.sh",
+            "command": "/home/grault/code/claude-config/profiles/default/hooks/prune-worktrees.sh",
             "timeout": 15
           }
         ]
@@ -51,7 +51,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/home/grault/code/claude-config/hooks/prune-worktrees.sh",
+            "command": "/home/grault/code/claude-config/profiles/default/hooks/prune-worktrees.sh",
             "timeout": 15
           }
         ]
@@ -63,7 +63,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/home/grault/code/claude-config/hooks/log-tool-use.sh"
+            "command": "/home/grault/code/claude-config/profiles/default/hooks/log-tool-use.sh"
           }
         ]
       }
@@ -74,7 +74,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/home/grault/code/claude-config/hooks/log-tool-result.sh"
+            "command": "/home/grault/code/claude-config/profiles/default/hooks/log-tool-result.sh"
           }
         ]
       }

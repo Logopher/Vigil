@@ -110,8 +110,8 @@ An attacker cannot plausibly (without further misconfiguration):
 
 Several claims in this document have not been exercised end-to-end:
 
-- Tilde expansion in permission and sandbox path patterns (`~/.ssh/`, etc.) has not been verified to actually match user home directories.
 - Sandbox enforcement has not been tested by attempting an actual read from a `denyRead` path.
 - `allowedDomains: []` has not been confirmed to block all outbound network in practice.
+- The installer's `{{HOME}}` substitution produces absolute paths, but whether Claude Code's permission matcher compares them correctly against the absolute paths Claude sees at tool-use time is not verified.
 
 These should be verified before relying on the protections for anything consequential. See `COMPATIBILITY.md` for the platforms tested.

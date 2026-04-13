@@ -114,9 +114,21 @@ Hook references in `settings.json` (e.g., `command: {{PROFILE_DIR}}/hooks/prune-
 
 ## Session logging
 
-Both wrappers pipe the session through `script(1)` to capture the interactive TUI to `~/claude-logs/session-<timestamp>.log`. The wrapper branches on `uname` for platform-correct `script(1)` syntax (BSD and util-linux take different flags).
+### Why this exists
 
-The logging hooks (`log-tool-use.sh`, `log-tool-result.sh`) append JSON entries to the same log around each tool call. Together they produce a log that captures both the TUI-rendered conversation (via `script`) and the machine-readable tool payload (via hooks).
+Claude Code does not give the user direct access to their own conversation history as readable files. Sessions can be resumed inside Claude Code, and the terminal has scrollback while a session is open, but there is no documented place to grep your past prompts or pull a transcript out for archival, citation, or sharing without copy-pasting the rendered TUI by hand. This tool exists to close that gap.
+
+The goal is *user-owned, readable conversation history*. Anything else (debugging payloads, structured tool data, integration with external log aggregators) is out of scope.
+
+### How it works
+
+Both session wrappers pipe Claude through `script(1)`, which captures every byte the TUI writes to `~/claude-logs/session-<timestamp>.log`. The wrapper branches on `uname` for platform-correct `script(1)` flags (BSD and util-linux differ).
+
+The raw `.log` is faithful to the terminal — `cat` it in a real TTY and the session re-renders, escape codes and all — but it is not readable as a transcript. Every cursor move and color change is in the byte stream.
+
+After `script` returns, the wrapper post-processes the `.log` into a parallel `.txt` via `scripts/strip-ansi.py`. The `.txt` is a plain transcript: ANSI sequences, charset selections, terminal-control characters, bare carriage returns, and runs of blank lines are stripped or collapsed. This is what the user reads or greps. Both files are kept; the `.log` for full fidelity, the `.txt` for the actual purpose.
+
+The post-processing runs in the shell wrapper rather than as a Claude Code hook because hooks fire inside the sandbox, which scrubs the env vars the wrapper sets to communicate the log path. The shell wrapper has no such constraint.
 
 ## Non-goals
 

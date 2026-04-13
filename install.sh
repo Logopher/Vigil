@@ -55,8 +55,14 @@ mkdir -p "$DEST_DIR"
 cp "$REPO_DIR/claude-aliases.sh" "$DEST_DIR/claude-aliases.sh"
 
 mkdir -p "$DEST_DIR/policies"
-for policy in "$REPO_DIR/policies/"*.json; do
-    cp "$policy" "$DEST_DIR/policies/"
+for src in "$REPO_DIR/policies/"*; do
+    fname="$(basename "$src")"
+    if [[ "$fname" == *.template.* ]]; then
+        dest_name="${fname/.template./.}"
+        sed "s|{{HOME}}|$HOME|g" "$src" > "$DEST_DIR/policies/$dest_name"
+    else
+        cp "$src" "$DEST_DIR/policies/$fname"
+    fi
 done
 
 for src_profile in "$REPO_DIR/profiles/"*/; do
@@ -69,7 +75,7 @@ for src_profile in "$REPO_DIR/profiles/"*/; do
             cp -r "$src" "$dest_profile/"
         elif [[ "$fname" == *.template.* ]]; then
             dest_name="${fname/.template./.}"
-            sed "s|{{PROFILE_DIR}}|$dest_profile|g" "$src" > "$dest_profile/$dest_name"
+            sed -e "s|{{PROFILE_DIR}}|$dest_profile|g" -e "s|{{HOME}}|$HOME|g" "$src" > "$dest_profile/$dest_name"
         else
             cp "$src" "$dest_profile/$fname"
         fi

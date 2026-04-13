@@ -53,7 +53,9 @@ done
 to_remove=()
 add_if_exists() {
     local path="$1"
-    [[ -e "$path" || -L "$path" ]] && to_remove+=("$path")
+    if [[ -e "$path" || -L "$path" ]]; then
+        to_remove+=("$path")
+    fi
 }
 
 add_if_exists "$DEST_DIR/claude-aliases.sh"

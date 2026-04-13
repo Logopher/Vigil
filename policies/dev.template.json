@@ -72,13 +72,13 @@
       "Read(.git/**)",
       "Write(.claude/**)",
       "Edit(.claude/**)",
-      "Read(~/.ssh/**)",
-      "Read(~/.aws/**)",
-      "Read(~/.netrc)",
-      "Read(~/.kube/**)",
-      "Read(~/.docker/config.json)",
-      "Read(~/.config/gh/**)",
-      "Read(~/.config/doctl/**)"
+      "Read({{HOME}}/.ssh/**)",
+      "Read({{HOME}}/.aws/**)",
+      "Read({{HOME}}/.netrc)",
+      "Read({{HOME}}/.kube/**)",
+      "Read({{HOME}}/.docker/config.json)",
+      "Read({{HOME}}/.config/gh/**)",
+      "Read({{HOME}}/.config/doctl/**)"
     ]
   }
 }

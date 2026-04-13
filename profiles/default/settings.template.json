@@ -8,13 +8,13 @@
     "enableWeakerNetworkIsolation": false,
     "filesystem": {
       "denyRead": [
-        "~/.ssh/",
-        "~/.aws/",
-        "~/.kube/",
-        "~/.netrc",
-        "~/.docker/config.json",
-        "~/.config/gh/",
-        "~/.config/doctl/"
+        "{{HOME}}/.ssh/",
+        "{{HOME}}/.aws/",
+        "{{HOME}}/.kube/",
+        "{{HOME}}/.netrc",
+        "{{HOME}}/.docker/config.json",
+        "{{HOME}}/.config/gh/",
+        "{{HOME}}/.config/doctl/"
       ]
     },
     "network": {
@@ -57,13 +57,13 @@
       "Bash(socat:*)",
       "Bash(telnet:*)",
       "Bash(ftp:*)",
-      "Read(~/.ssh/**)",
-      "Read(~/.aws/**)",
-      "Read(~/.netrc)",
-      "Read(~/.kube/**)",
-      "Read(~/.docker/config.json)",
-      "Read(~/.config/gh/**)",
-      "Read(~/.config/doctl/**)"
+      "Read({{HOME}}/.ssh/**)",
+      "Read({{HOME}}/.aws/**)",
+      "Read({{HOME}}/.netrc)",
+      "Read({{HOME}}/.kube/**)",
+      "Read({{HOME}}/.docker/config.json)",
+      "Read({{HOME}}/.config/gh/**)",
+      "Read({{HOME}}/.config/doctl/**)"
     ]
   },
   "hooks": {

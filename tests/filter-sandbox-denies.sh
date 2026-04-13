@@ -196,6 +196,87 @@ else
 fi
 
 # -----------------------------------------------------------------------------
+section "--check: in-sync install reports clean and exits 0"
+home=$(mktmp)
+settings="$home/settings.json"
+seed_empty_settings "$settings"
+mkdir -p "$home/.ssh"
+run_script "$home" "$settings"
+before=$(cat "$settings")
+rc=0
+out=$(HOME="$home" python3 "$SCRIPT" --check "$settings" 2>&1) || rc=$?
+after=$(cat "$settings")
+if [[ $rc -eq 0 ]]; then
+    pass "--check exits 0 when JSON already matches"
+else
+    fail "--check should exit 0 on in-sync install (rc=$rc, out: $out)"
+fi
+if [[ "$before" == "$after" ]]; then
+    pass "--check did not modify settings.json"
+else
+    fail "--check must not write settings.json"
+fi
+if grep -q "in sync" <<< "$out"; then
+    pass "--check reports in-sync status"
+else
+    fail "expected 'in sync' in --check output (got: $out)"
+fi
+
+# -----------------------------------------------------------------------------
+section "--check: drift after filesystem change is detected"
+# Same install, then create ~/.aws after the fact. JSON is now stale.
+mkdir -p "$home/.aws"
+before=$(cat "$settings")
+rc=0
+out=$(HOME="$home" python3 "$SCRIPT" --check "$settings" 2>&1) || rc=$?
+after=$(cat "$settings")
+if [[ $rc -eq 1 ]]; then
+    pass "--check exits 1 when JSON is stale"
+else
+    fail "--check should exit 1 on drift (rc=$rc, out: $out)"
+fi
+if [[ "$before" == "$after" ]]; then
+    pass "--check did not modify settings.json on drift"
+else
+    fail "--check must not write settings.json even on drift"
+fi
+if grep -q "drift" <<< "$out"; then
+    pass "--check reports drift in output"
+else
+    fail "expected 'drift' in --check output (got: $out)"
+fi
+
+# A real run brings JSON back in sync; --check should now report clean.
+run_script "$home" "$settings"
+rc=0
+HOME="$home" python3 "$SCRIPT" --check "$settings" >/dev/null 2>&1 || rc=$?
+if [[ $rc -eq 0 ]]; then
+    pass "--check returns to clean after a real run"
+else
+    fail "--check should be clean after re-running filter (rc=$rc)"
+fi
+
+# -----------------------------------------------------------------------------
+section "--check: would-drop entries surfaced with reason"
+# Install when ~/.aws is a real directory, then replace with a symlink.
+# The JSON still references it but it's now bwrap-incompatible.
+home=$(mktmp)
+settings="$home/settings.json"
+seed_empty_settings "$settings"
+mkdir -p "$home/.aws"
+run_script "$home" "$settings"
+rm -rf "$home/.aws"
+mkdir -p "$home/aws-target"
+ln -s "$home/aws-target" "$home/.aws"
+rc=0
+out=$(HOME="$home" python3 "$SCRIPT" --check "$settings" 2>&1) || rc=$?
+if [[ $rc -eq 1 ]] && grep -q "would drop" <<< "$out" && grep -q "symlink" <<< "$out"; then
+    pass "--check surfaces would-drop entries with reason"
+else
+    fail "expected would-drop output mentioning symlink (rc=$rc, out: $out)"
+fi
+
+# -----------------------------------------------------------------------------
 section "Idempotent: two consecutive runs yield identical output"
 home=$(mktmp)
 settings="$home/settings.json"

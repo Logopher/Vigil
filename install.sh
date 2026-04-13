@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Install the claude-config tree to $HOME/.config/claude-config/ and
+# Install the claude-config tree to ~/.config/claude-config/ and
 # symlink ~/.claude to the default profile.
 set -euo pipefail
 shopt -s nullglob
@@ -33,6 +33,10 @@ DEST_DIR="$HOME/.config/claude-config"
 CLAUDE_LINK="$HOME/.claude"
 TIMESTAMP="$(date +%Y%m%d-%H%M%S)"
 
+display_path() {
+    printf '%s' "${1/#$HOME/\~}"
+}
+
 move_aside() {
     local path="$1"
     [[ -e "$path" || -L "$path" ]] || return 0
@@ -42,7 +46,7 @@ move_aside() {
     fi
     local backup="${path}.bak-${TIMESTAMP}"
     mv -- "$path" "$backup"
-    printf 'Moved %s to %s\n' "$path" "$backup"
+    printf 'Moved %s to %s\n' "$(display_path "$path")" "$(display_path "$backup")"
 }
 
 move_aside "$DEST_DIR"
@@ -78,11 +82,14 @@ done
 move_aside "$CLAUDE_LINK"
 ln -s "$DEST_DIR/profiles/default" "$CLAUDE_LINK"
 
+DEST_DISPLAY="$(display_path "$DEST_DIR")"
+CLAUDE_LINK_DISPLAY="$(display_path "$CLAUDE_LINK")"
+
 cat <<MSG
 
-Installed to $DEST_DIR
-Linked $CLAUDE_LINK -> $DEST_DIR/profiles/default
+Installed to $DEST_DISPLAY
+Linked $CLAUDE_LINK_DISPLAY -> $DEST_DISPLAY/profiles/default
 
 If not already present, add to your shell rc:
-  [ -f "$DEST_DIR/claude-aliases.sh" ] && source "$DEST_DIR/claude-aliases.sh"
+  [ -f "$DEST_DISPLAY/claude-aliases.sh" ] && source "$DEST_DISPLAY/claude-aliases.sh"
 MSG

@@ -7,11 +7,15 @@ shopt -s nullglob
 cd "$(dirname "$0")"
 
 failed=()
-for suite in ./*.sh; do
+for suite in ./*.sh ./*.py; do
     name="$(basename "$suite")"
     [[ "$name" == "run.sh" ]] && continue
     printf '\n### %s ###\n' "$name"
-    if bash "$suite"; then
+    case "$suite" in
+        *.sh) runner=(bash "$suite") ;;
+        *.py) runner=(python3 "$suite") ;;
+    esac
+    if "${runner[@]}"; then
         :
     else
         failed+=("$name")

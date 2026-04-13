@@ -40,7 +40,7 @@ Worktree matching is by basename, not full path, to survive Windows/MSYS2 path-f
 ## Editing conventions
 
 - Permission lists in the JSON files are order-insensitive but duplicates between `allow`/`deny` resolve to `deny` — add to `deny` rather than removing from `allow` when tightening.
-- The deny list intentionally blocks both `Bash(rm:*)` and `Bash(rm *)` to cover both matcher styles; keep both if you touch that area.
+- Use the colon matcher form (`Bash(rm:*)`) for deny/allow patterns; the space form (`Bash(rm *)`) is non-standard.
 - After editing a settings file, the change is live for the next `claude` invocation in any consuming project — no reload needed here.
 
 ## Collaboration rules

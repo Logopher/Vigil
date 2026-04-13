@@ -171,6 +171,77 @@ else
 fi
 
 # -----------------------------------------------------------------------------
+section "denyWrite filtered to extant paths"
+# The default profile declares system paths (/etc, /usr, /var, /opt) and
+# user paths (~/.local/bin, ~/.local/lib, ~/bin) under denyWrite. After
+# install in an ephemeral $HOME, only the system paths that exist on the
+# host should remain; the user paths should all be filtered out.
+home=$(mktmp)
+install_into "$home"
+denywrite=$(python3 -c "
+import json
+with open('$home/.claude/settings.json') as f:
+    s = json.load(f)
+entries = s.get('sandbox', {}).get('filesystem', {}).get('denyWrite', [])
+print('\n'.join(entries))
+")
+# /etc always exists.
+if grep -qx '/etc/' <<< "$denywrite"; then
+    pass "real system path /etc/ retained in denyWrite"
+else
+    fail "expected /etc/ in denyWrite (got: $denywrite)"
+fi
+# Ephemeral $HOME has no ~/.local/bin.
+if grep -q "$home/.local/bin" <<< "$denywrite"; then
+    fail "missing ~/.local/bin should have been filtered from denyWrite"
+else
+    pass "missing ~/.local/bin filtered from denyWrite"
+fi
+if grep -q "$home/bin" <<< "$denywrite"; then
+    fail "missing ~/bin should have been filtered from denyWrite"
+else
+    pass "missing ~/bin filtered from denyWrite"
+fi
+
+# Positive case: pre-create ~/.local/bin and re-install; entry should
+# survive the filter pass.
+home=$(mktmp)
+mkdir -p "$home/.local/bin"
+install_into "$home"
+denywrite=$(python3 -c "
+import json
+with open('$home/.claude/settings.json') as f:
+    s = json.load(f)
+entries = s.get('sandbox', {}).get('filesystem', {}).get('denyWrite', [])
+print('\n'.join(entries))
+")
+if grep -q "$home/.local/bin" <<< "$denywrite"; then
+    pass "pre-existing ~/.local/bin retained in denyWrite"
+else
+    fail "expected ~/.local/bin in denyWrite when present (got: $denywrite)"
+fi
+
+# Symlinks under denyWrite must be dropped too — same bwrap-incompatible
+# failure mode that motivates the filter for denyRead.
+home=$(mktmp)
+mkdir -p "$home/local-bin-target"
+mkdir -p "$home/.local"
+ln -s "$home/local-bin-target" "$home/.local/bin"
+install_into "$home"
+denywrite=$(python3 -c "
+import json
+with open('$home/.claude/settings.json') as f:
+    s = json.load(f)
+entries = s.get('sandbox', {}).get('filesystem', {}).get('denyWrite', [])
+print('\n'.join(entries))
+")
+if grep -q "$home/.local/bin" <<< "$denywrite"; then
+    fail "symlinked ~/.local/bin should have been filtered (bwrap-incompatible)"
+else
+    pass "symlinked ~/.local/bin filtered from denyWrite"
+fi
+
+# -----------------------------------------------------------------------------
 section "Hook executable bits"
 hook_fail=0
 for hook in "$home/.claude/hooks"/*.sh; do

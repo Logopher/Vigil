@@ -1,53 +1,52 @@
-I'm a software developer comfortable with Linux. What level of technical proficiency should I expect someone else to have before they would find this configuration tool useful?
+# Audience
 
-● Honest floor — and this is worth being explicit about in the README,
-  because a mismatch wastes both sides' time:
+Who this tool is for, who it isn't, and how to tell the difference. Mismatches waste both sides' time, so the framing here is deliberately concrete.
 
-  Required to get value:
+## What you actually need
 
-  - Comfortable in a Linux or WSL terminal. Can clone a repo, run
-  ./install.sh, edit a config file, source shell rc changes. Not "I've used
-  a terminal," but "I can debug when the terminal says no."
-  - Has used Claude Code for more than a week and has at least opened
-  settings.json. Someone who uses it exclusively through the desktop app or
-  an IDE extension will find this tool mostly invisible.
-  - Understands, or can accept on authority, why they'd want to restrict an
-  AI agent's access to their machine. If they think "why would I block rm?"
-  is a serious question, the tool's value proposition doesn't land.
-  - Can read JSON well enough to edit a policy by hand. No GUI, no wizard.
-  - Basic grasp that shell hooks and env vars exist. They don't need to
-  write them; they need to not panic when they appear in the config.
+To get *value* from the tool — installing it, picking a policy, running sessions:
 
-  Sweet spot:
+- **Comfort in a Linux, WSL2, or macOS terminal.** Not "I've used a terminal," but "I can debug when the terminal says no." You will run `./install.sh`, source a file from your shell rc, and occasionally read an error message.
+- **Awareness that an LLM agent can do real damage if unsupervised.** Not paranoia — just the working assumption that "let an autonomous process run shell commands on my machine" is the kind of thing that warrants a deliberate posture. If "why would I block `rm`?" feels like a serious question, the value proposition doesn't land yet.
+- **Willingness to re-run `install.sh` after pulling repo changes.** Edits in this repo do not affect live sessions until you reinstall. This friction is deliberate (see `DESIGN.md`), but it requires you to accept the maintenance.
 
-  Mid-to-senior developer on Linux or WSL, security-conscious, already
-  frustrated by something Claude Code does by default. They've thought about
-   it enough to want a better baseline but haven't wanted to build it from
-  scratch. The conceptual split between profile (identity) and policy
-  (posture) clicks quickly for them, because they've seen the same split
-  elsewhere (AWS profiles, browser profiles, IAM policies).
+To *modify* the tool — writing your own deny rules, adding a profile, tweaking sandbox config:
 
-  Above the sweet spot:
+- **Comfort reading and editing JSON.** No GUI, no wizard. The schema is small but you need to be willing to look at it.
+- **A working mental model of shell hooks and environment variables.** You don't need to write them; you need to not panic when they appear in the config.
 
-  Senior devs who already have their own opinionated Claude config. They
-  won't use the tool — they'll fork it, steal ideas from it, or politely
-  ignore it. That's a healthy audience, not a failure mode. Write the README
-   so those readers can scan for ideas without feeling talked down to.
+## Sweet spot
 
-  Below the floor:
+A developer who has had a moment of *"wait, why did Claude just do that?"* — has thought about agent safety enough to want a baseline, but hasn't wanted to design one from scratch. Mid-to-senior, comfortable in the terminal, security-aware without being a specialist.
 
-  - Non-technical users.
-  - Claude Code first-weekers.
-  - People who use Claude Code exclusively on macOS through the desktop app.
-  - People on native Windows who don't use WSL.
+The conceptual split between profile (identity, hooks, sandbox) and policy (posture: strict / dev / yolo) clicks quickly for this reader, because they've seen the same split elsewhere — AWS profiles, browser profiles, IAM policies.
 
-  A useful concrete test: a friend should be able to read your future
-  DESIGN.md and independently explain, in their own words, why strict is the
-   default and when to reach for dev. If they can't, the tool will bite them
-   and they'll bounce. If they can, they'll get real value.
+## Above the sweet spot
 
-  One practical implication: the README's first paragraph should say who
-  this is not for, not just who it is for. "This tool assumes you're
-  comfortable editing shell config and JSON, and that you've used Claude
-  Code long enough to have opinions about its defaults. If you're newer than
-   that, come back in a few weeks." Saves everyone time.
+Senior developers who already have their own opinionated Claude config. They won't use the tool as-is; they'll fork it, steal ideas, or politely ignore it. That's a healthy audience, not a failure mode. The docs aim to be readable for a scan rather than handhold-y, so this reader doesn't feel talked down to.
+
+## Outside current scope
+
+Not "below the floor" — these are users for whom the tool currently doesn't fit, sometimes for fixable reasons:
+
+- **Users without terminal proficiency.** No way around this; the tool is text-and-config.
+- **Users on native Windows without WSL.** The installer is bash-only. Could change with a PowerShell port or a WSL-required notice; today it's a hard limit.
+- **Users who don't know what `~/.claude/settings.json` is.** Whether they reach Claude through the desktop app, an IDE extension, or the CLI is irrelevant — the tool's value depends on understanding *what configuration is* and being willing to manage it. A user who only consumes Claude through a polished UI may never need or notice this tool.
+
+### Common misconceptions about who the tool is *not* for
+
+- **"macOS desktop app users."** Wrong: the desktop app uses the same Claude Code engine and reads the same `settings.json`. Our config applies to it. The relevant question is the bullet above — does the user know what `settings.json` is — not which surface they launch Claude from.
+- **"People new to Claude Code."** Wrong: a safe baseline benefits new users *more*, not less. The earlier framing conflated familiarity with competence. The actual prerequisite is "knows what an autonomous agent can do," which doesn't require any specific Claude Code mileage.
+
+## Self-use vs. friend-deploy
+
+The repo serves two related but different audiences:
+
+- **Self-use:** the maintainer running this on their own machines, where friction is acceptable and the install model can be terse.
+- **Friend-deploy:** people the maintainer hands the repo to, who need the docs and installer to stand on their own. Friction tolerance is much lower; an unclear error message that the maintainer would shrug off becomes a "why doesn't this work?" message at 11 PM.
+
+Most decisions in the repo lean toward self-use. The `BACKLOG.md` "Friction-removal" section names features that would shift the balance toward friend-deploy without compromising the security model.
+
+## A practical test
+
+A friend should be able to read `DESIGN.md` and explain, in their own words, **why `strict` is the default and when to reach for `dev`**. If they can't, the tool will bite them and they'll bounce. If they can, they'll get real value from it.

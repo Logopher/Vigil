@@ -58,11 +58,27 @@
       "Bash(npm publish:*)",
       "Bash(docker:*)",
       "Bash(kubectl:*)",
+      "Bash(ssh:*)",
+      "Bash(scp:*)",
+      "Bash(sftp:*)",
+      "Bash(rsync:*)",
+      "Bash(nc:*)",
+      "Bash(ncat:*)",
+      "Bash(socat:*)",
+      "Bash(telnet:*)",
+      "Bash(ftp:*)",
       "Write(.git/**)",
       "Edit(.git/**)",
       "Read(.git/**)",
       "Write(.claude/**)",
-      "Edit(.claude/**)"
+      "Edit(.claude/**)",
+      "Read(~/.ssh/**)",
+      "Read(~/.aws/**)",
+      "Read(~/.netrc)",
+      "Read(~/.kube/**)",
+      "Read(~/.docker/config.json)",
+      "Read(~/.config/gh/**)",
+      "Read(~/.config/doctl/**)"
     ]
   }
 }

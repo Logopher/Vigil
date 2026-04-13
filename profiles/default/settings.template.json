@@ -29,7 +29,23 @@
       "Bash(npx:*)",
       "Bash(npm publish:*)",
       "Bash(docker:*)",
-      "Bash(kubectl:*)"
+      "Bash(kubectl:*)",
+      "Bash(ssh:*)",
+      "Bash(scp:*)",
+      "Bash(sftp:*)",
+      "Bash(rsync:*)",
+      "Bash(nc:*)",
+      "Bash(ncat:*)",
+      "Bash(socat:*)",
+      "Bash(telnet:*)",
+      "Bash(ftp:*)",
+      "Read(~/.ssh/**)",
+      "Read(~/.aws/**)",
+      "Read(~/.netrc)",
+      "Read(~/.kube/**)",
+      "Read(~/.docker/config.json)",
+      "Read(~/.config/gh/**)",
+      "Read(~/.config/doctl/**)"
     ]
   },
   "hooks": {

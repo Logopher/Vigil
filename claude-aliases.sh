@@ -35,14 +35,16 @@ _claude_run_with_logging() (
     # variable; unset on read-only or special vars fails harmlessly.
     # Membership check uses string match (not associative array) for
     # bash 3.2 compatibility — macOS ships /bin/bash 3.2.
-    local _allow_str=" ${_claude_env_allowlist[*]} "
-    local _v
-    while IFS= read -r _v; do
-        [[ "$_allow_str" == *" $_v "* ]] && continue
-        [[ "$_v" == LC_* ]] && continue
-        [[ "$_v" == GIT_* ]] && continue
-        [[ "$_v" == BASH* || "$_v" == _ || "$_v" == _claude_* ]] && continue
-        unset "$_v" 2>/dev/null || true
+    # Loop-locals use the _claude_ prefix so the loop doesn't clobber
+    # itself when it iterates over them via compgen -v.
+    local _claude_allow_str=" ${_claude_env_allowlist[*]} "
+    local _claude_v
+    while IFS= read -r _claude_v; do
+        [[ "$_claude_allow_str" == *" $_claude_v "* ]] && continue
+        [[ "$_claude_v" == LC_* ]] && continue
+        [[ "$_claude_v" == GIT_* ]] && continue
+        [[ "$_claude_v" == BASH* || "$_claude_v" == _ || "$_claude_v" == _claude_* ]] && continue
+        unset "$_claude_v" 2>/dev/null || true
     done < <(compgen -v)
 
     export CLAUDE_SESSION_ID=$(date +%Y%m%d-%H%M%S)

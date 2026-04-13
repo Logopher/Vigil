@@ -37,25 +37,17 @@ Add to your `~/.bashrc` (or equivalent) so the `claude`, `claude-dev`, `claude-s
 
 ## Updating
 
-Repo edits do not change session behavior until the installer runs. Because the installer refuses to overwrite existing files, an update involves moving runtime state out of the way first:
+Repo edits do not change session behavior until the installer runs. To refresh an existing install:
 
 ```
 cd ~/code/claude-config
 git pull            # or make local edits
-
-# Preserve Claude Code runtime state, then remove the old install.
-mkdir -p /tmp/claude-state
-mv ~/.claude/{.credentials.json,history.jsonl,backups,cache,file-history,ide,projects,session-env,sessions,shell-snapshots} /tmp/claude-state/ 2>/dev/null || true
-rm -rf ~/.claude ~/.config/claude-config
-
-./install.sh
-
-# Restore runtime state.
-mv /tmp/claude-state/* ~/.claude/ 2>/dev/null || true
-rmdir /tmp/claude-state
+./update.sh         # interactive; pass -y to skip the prompt
 ```
 
-The clumsiness is deliberate. A friendlier workflow belongs in a future `update.sh` that knows which files are "ours" versus Claude Code's; designing that safely is tracked as a Stage 1 gap.
+`update.sh` defers to `uninstall.sh` to remove only files placed by this repo, moves any surviving state (Claude Code runtime data — credentials, sessions, history, projects — and user additions like custom agents, hooks, or policies) into a tempdir, runs `install.sh` into the now-empty destinations, then restores the saved state with `cp -rn` so freshly installed files always win. On clean exit the tempdir is removed; on failure it is preserved and its path is printed.
+
+In-place edits to installed files (e.g., a locally modified `~/.config/claude-config/claude-aliases.sh`) are lost on update — the install is the source of truth.
 
 ## Uninstalling
 

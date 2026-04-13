@@ -65,6 +65,7 @@ install_into "$home"
 uninstall_into "$home"
 
 check_absent "claude-aliases.sh"   "$home/.config/claude-config/claude-aliases.sh"
+check_absent "doctor.sh"           "$home/.config/claude-config/doctor.sh"
 check_absent "policies/dev.json"   "$home/.config/claude-config/policies/dev.json"
 check_absent "policies/strict.json" "$home/.config/claude-config/policies/strict.json"
 check_absent "policies/yolo.json"  "$home/.config/claude-config/policies/yolo.json"

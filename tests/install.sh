@@ -63,6 +63,13 @@ check_file() {
 
 check_file "aliases at ~/.config/claude-config/claude-aliases.sh" \
     "$home/.config/claude-config/claude-aliases.sh"
+check_file "doctor.sh at ~/.config/claude-config/doctor.sh" \
+    "$home/.config/claude-config/doctor.sh"
+if [[ -x "$home/.config/claude-config/doctor.sh" ]]; then
+    pass "doctor.sh is executable"
+else
+    fail "doctor.sh should be executable"
+fi
 check_file "policies/dev.json generated"            "$home/.config/claude-config/policies/dev.json"
 check_file "policies/strict.json generated"         "$home/.config/claude-config/policies/strict.json"
 check_file "policies/yolo.json copied"              "$home/.config/claude-config/policies/yolo.json"
@@ -302,6 +309,19 @@ if [[ "$rc" != "0" ]]; then
     pass "installer refuses when profiles/default exists"
 else
     fail "expected refusal on pre-existing profiles/default"
+fi
+
+# -----------------------------------------------------------------------------
+section "Refusal: doctor.sh already exists"
+home=$(mktmp)
+mkdir -p "$home/.config/claude-config"
+echo "existing" > "$home/.config/claude-config/doctor.sh"
+out=$(install_capture "$home")
+rc=$(printf '%s\n' "$out" | head -1)
+if [[ "$rc" != "0" ]]; then
+    pass "installer refuses when doctor.sh exists"
+else
+    fail "expected refusal on pre-existing doctor.sh"
 fi
 
 # -----------------------------------------------------------------------------

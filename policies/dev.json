@@ -57,7 +57,12 @@
       "Bash(npx:*)",
       "Bash(npm publish:*)",
       "Bash(docker:*)",
-      "Bash(kubectl:*)"
+      "Bash(kubectl:*)",
+      "Write(.git/**)",
+      "Edit(.git/**)",
+      "Read(.git/**)",
+      "Write(.claude/**)",
+      "Edit(.claude/**)"
     ]
   }
 }

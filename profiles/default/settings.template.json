@@ -1,9 +1,27 @@
 {
   "sandbox": {
     "enabled": true,
-    "mode": "auto-allow",
+    "failIfUnavailable": true,
+    "autoAllowBashIfSandboxed": true,
     "allowUnsandboxedCommands": false,
-    "allowedDomains": []
+    "enableWeakerNestedSandbox": false,
+    "enableWeakerNetworkIsolation": false,
+    "filesystem": {
+      "denyRead": [
+        "~/.ssh/",
+        "~/.aws/",
+        "~/.kube/",
+        "~/.netrc",
+        "~/.docker/config.json",
+        "~/.config/gh/",
+        "~/.config/doctl/"
+      ]
+    },
+    "network": {
+      "allowedDomains": [],
+      "allowAllUnixSockets": false,
+      "allowLocalBinding": false
+    }
   },
   "permissions": {
     "defaultMode": "plan",

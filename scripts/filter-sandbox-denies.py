@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Filter sandbox.filesystem.denyRead and denyWrite entries in a
-settings.json to paths bubblewrap can actually mount over.
+"""Rebuild sandbox.filesystem.denyRead and denyWrite in a settings.json
+from a master list defined in this script, intersected with the paths
+the host filesystem currently accepts as bubblewrap mount targets.
 
-Bubblewrap requires each tmpfs/bind target to be a real directory or file
-on the host filesystem. The following entries cause sandbox init to fail
+Bubblewrap requires each tmpfs/bind target to be a real directory or
+file on the host. The following entries cause sandbox init to fail
 closed — every subprocess in the session fails, regardless of what it
 does:
 
@@ -16,10 +17,15 @@ does:
   - File-typed entries (no trailing "/") whose path is absent or is a
     directory/symlink.
 
-This filter is one-way: entries that don't pass the type check at run
-time are dropped. Paths that appear later (e.g., a real ~/.aws/ created
-by installing AWS CLI, or ~/.local/bin created by a pip --user install)
-require re-running the installer to be reintroduced.
+The master lists below are the source of truth. On every run this
+script overwrites the JSON's denyRead and denyWrite arrays with the
+master entries that currently pass the type check — so newly created
+paths (e.g., ~/.aws/ after installing AWS CLI) appear automatically the
+next time it runs, and paths that have since disappeared drop out.
+
+To change the desired deny set, edit MASTER_DENY_READ / MASTER_DENY_WRITE
+in this file. Whatever is present in the target JSON is ignored as
+input; this script is authoritative.
 
 Usage: filter-sandbox-denies.py [settings.json]
 
@@ -30,6 +36,29 @@ import json
 import os
 import sys
 from pathlib import Path
+
+# Master lists. "~" is expanded at run time. Entries ending in "/" must
+# resolve to a real directory; entries without a trailing slash must
+# resolve to a real file. Symlinks are always rejected.
+MASTER_DENY_READ = (
+    "~/.ssh/",
+    "~/.aws/",
+    "~/.kube/",
+    "~/.netrc",
+    "~/.docker/config.json",
+    "~/.config/gh/",
+    "~/.config/doctl/",
+)
+
+MASTER_DENY_WRITE = (
+    "/etc/",
+    "/usr/",
+    "/var/",
+    "/opt/",
+    "~/.local/bin/",
+    "~/.local/lib/",
+    "~/bin/",
+)
 
 
 def evaluate(entry: str) -> tuple[bool, str]:
@@ -47,6 +76,25 @@ def evaluate(entry: str) -> tuple[bool, str]:
         return False, "expected file; missing or wrong type"
 
 
+def build(master: tuple[str, ...]) -> tuple[list[str], list[tuple[str, str]]]:
+    """Expand each master entry and partition into (kept, dropped).
+
+    Kept entries preserve the original master-list spelling (with "~")
+    so the JSON stays portable across users. Dropped entries are
+    returned with their expanded path for the diagnostic output.
+    """
+    kept: list[str] = []
+    dropped: list[tuple[str, str]] = []
+    for entry in master:
+        expanded = os.path.expanduser(entry)
+        keep, reason = evaluate(expanded)
+        if keep:
+            kept.append(expanded)
+        else:
+            dropped.append((expanded, reason))
+    return kept, dropped
+
+
 def main(argv):
     if len(argv) > 2:
         print(f"usage: {argv[0]} [settings.json]", file=sys.stderr)
@@ -61,30 +109,18 @@ def main(argv):
     with open(target) as f:
         settings = json.load(f)
 
-    filesystem = settings.get("sandbox", {}).get("filesystem", {})
-    keys = [k for k in ("denyRead", "denyWrite") if k in filesystem]
-    if not keys:
-        print(
-            "filter-sandbox-denies: no sandbox.filesystem.denyRead or "
-            f"denyWrite in {target}; nothing to filter.",
-            file=sys.stderr,
-        )
-        return 0
+    sandbox = settings.setdefault("sandbox", {})
+    filesystem = sandbox.setdefault("filesystem", {})
 
-    total = 0
-    kept_total = 0
-    dropped = []  # list of (key, entry, reason)
-    for key in keys:
-        kept = []
-        for entry in filesystem[key]:
-            total += 1
-            keep, reason = evaluate(entry)
-            if keep:
-                kept.append(entry)
-                kept_total += 1
-            else:
-                dropped.append((key, entry, reason))
+    keys = (("denyRead", MASTER_DENY_READ), ("denyWrite", MASTER_DENY_WRITE))
+    all_dropped: list[tuple[str, str, str]] = []
+    summary_parts: list[str] = []
+    for key, master in keys:
+        kept, dropped = build(master)
         filesystem[key] = kept
+        summary_parts.append(f"{key}: {len(kept)}/{len(master)} kept")
+        for entry, reason in dropped:
+            all_dropped.append((key, entry, reason))
 
     tmp = target + ".tmp"
     with open(tmp, "w") as f:
@@ -92,11 +128,8 @@ def main(argv):
         f.write("\n")
     os.replace(tmp, target)
 
-    print(
-        f"filter-sandbox-denies: {total} entries total across "
-        f"{', '.join(keys)}; {kept_total} kept, {len(dropped)} dropped."
-    )
-    for key, entry, reason in dropped:
+    print("filter-sandbox-denies: " + "; ".join(summary_parts) + ".")
+    for key, entry, reason in all_dropped:
         print(f"  dropped {key}: {entry}  ({reason})")
     return 0
 

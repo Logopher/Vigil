@@ -133,10 +133,13 @@ for hook in "$CLAUDE_DIR/hooks/"*.sh; do
     chmod +x "$hook"
 done
 
-# Filter sandbox.filesystem.denyRead to paths that currently exist.
-# Bubblewrap requires each tmpfs-mount target to exist; a missing entry
-# causes sandbox init to fail closed for every subprocess. See
-# scripts/filter-sandbox-denies.py for details.
+# Populate sandbox.filesystem.denyRead and denyWrite from the master
+# lists embedded in scripts/filter-sandbox-denies.py, intersected with
+# paths that currently exist on this host. Bubblewrap requires each
+# tmpfs-mount target to exist; a missing entry causes sandbox init to
+# fail closed for every subprocess. The script can be re-run anytime
+# to pick up newly created or removed paths. See the script header
+# for details.
 python3 "$DEST_DIR/scripts/filter-sandbox-denies.py" "$CLAUDE_DIR/settings.json"
 
 # Convenience symlink: lets users and docs reference the default profile

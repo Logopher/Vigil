@@ -30,6 +30,8 @@ Hooks registered in the default profile:
 
 Hook paths in the template use the `{{PROFILE_DIR}}` placeholder; the installer substitutes the installed profile directory when generating `settings.json`. The logging hooks rely on `CLAUDE_SESSION_ID` and `CLAUDE_LOG_DIR` exported by `claude-aliases.sh` — if Claude is launched without that wrapper sourced, the hooks write to an undefined path.
 
+The sandbox `denyRead` and `denyWrite` lists are *not* defined in `settings.template.json`. Their authoritative source is the master tuples (`MASTER_DENY_READ`, `MASTER_DENY_WRITE`) at the top of `scripts/filter-sandbox-denies.py`. The installer invokes that script after writing `settings.json`; the script overwrites the two arrays with the master entries that currently pass bubblewrap's mount-target type check. To change the desired deny set, edit the Python source — not the JSON template. The script is safe to re-run standalone (e.g., after installing a new CLI that creates `~/.aws/`) to refresh the lists without a full reinstall.
+
 ## `profiles/default/hooks/prune-worktrees.sh`
 
 Runs at session start and end against `<repo>/.claude/worktrees/`. Its invariants are load-bearing — preserve them when editing:

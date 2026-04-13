@@ -6,26 +6,7 @@
     "allowUnsandboxedCommands": false,
     "enableWeakerNestedSandbox": false,
     "enableWeakerNetworkIsolation": false,
-    "filesystem": {
-      "denyRead": [
-        "{{HOME}}/.ssh/",
-        "{{HOME}}/.aws/",
-        "{{HOME}}/.kube/",
-        "{{HOME}}/.netrc",
-        "{{HOME}}/.docker/config.json",
-        "{{HOME}}/.config/gh/",
-        "{{HOME}}/.config/doctl/"
-      ],
-      "denyWrite": [
-        "/etc/",
-        "/usr/",
-        "/var/",
-        "/opt/",
-        "{{HOME}}/.local/bin/",
-        "{{HOME}}/.local/lib/",
-        "{{HOME}}/bin/"
-      ]
-    },
+    "filesystem": {},
     "network": {
       "allowedDomains": [],
       "allowAllUnixSockets": false,

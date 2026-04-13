@@ -308,4 +308,89 @@ fi
 unset AWS_SECRET_ACCESS_KEY GITHUB_TOKEN ANTHROPIC_API_KEY NPM_TOKEN \
       MY_CUSTOM_SECRET LC_TEST_VAR GIT_AUTHOR_NAME ENV_CAPTURE
 
+# -----------------------------------------------------------------------------
+section "claude-log: error when no transcripts present"
+fake_home=$(mktmp_dir)
+out=$(HOME="$fake_home" claude-log 2>&1)
+rc=$?
+if [[ $rc -ne 0 ]] && grep -q "no transcripts" <<<"$out"; then
+    pass "claude-log errors when no transcripts present"
+else
+    fail "claude-log should fail with 'no transcripts' (rc=$rc, out=$out)"
+fi
+
+# -----------------------------------------------------------------------------
+section "claude-log: index selection (no arg, -1, -2, out-of-range)"
+fake_home=$(mktmp_dir)
+mkdir -p "$fake_home/claude-logs"
+# Lex-sortable timestamps so newest = highest = ...0412.
+echo "session A" > "$fake_home/claude-logs/session-20260410-100000.txt"
+echo "session B" > "$fake_home/claude-logs/session-20260411-100000.txt"
+echo "session C" > "$fake_home/claude-logs/session-20260412-100000.txt"
+
+out=$(HOME="$fake_home" PAGER=cat claude-log)
+if [[ "$out" == "session C" ]]; then
+    pass "claude-log (no arg) returns most recent"
+else
+    fail "claude-log no-arg got '$out' (expected 'session C')"
+fi
+
+out=$(HOME="$fake_home" PAGER=cat claude-log -1)
+if [[ "$out" == "session B" ]]; then
+    pass "claude-log -1 returns previous"
+else
+    fail "claude-log -1 got '$out' (expected 'session B')"
+fi
+
+out=$(HOME="$fake_home" PAGER=cat claude-log -2)
+if [[ "$out" == "session A" ]]; then
+    pass "claude-log -2 returns two-back"
+else
+    fail "claude-log -2 got '$out' (expected 'session A')"
+fi
+
+out=$(HOME="$fake_home" PAGER=cat claude-log -5 2>&1)
+rc=$?
+if [[ $rc -ne 0 ]] && grep -q "only" <<<"$out"; then
+    pass "claude-log out-of-range -N errors"
+else
+    fail "claude-log -5 should error 'only N available' (rc=$rc, out=$out)"
+fi
+
+# -----------------------------------------------------------------------------
+section "claude-log: date prefix matching (compact + dashed forms)"
+# Two transcripts on the same day; date-prefix returns the most recent.
+echo "morning" > "$fake_home/claude-logs/session-20260413-090000.txt"
+echo "evening" > "$fake_home/claude-logs/session-20260413-180000.txt"
+
+out=$(HOME="$fake_home" PAGER=cat claude-log 20260413)
+if [[ "$out" == "evening" ]]; then
+    pass "claude-log <YYYYMMDD> returns most recent of that day"
+else
+    fail "claude-log 20260413 got '$out' (expected 'evening')"
+fi
+
+out=$(HOME="$fake_home" PAGER=cat claude-log 2026-04-13)
+if [[ "$out" == "evening" ]]; then
+    pass "claude-log <YYYY-MM-DD> strips dashes for match"
+else
+    fail "claude-log 2026-04-13 got '$out' (expected 'evening')"
+fi
+
+out=$(HOME="$fake_home" PAGER=cat claude-log 19990101 2>&1)
+rc=$?
+if [[ $rc -ne 0 ]] && grep -q "no transcript matching" <<<"$out"; then
+    pass "claude-log <unmatched date> errors"
+else
+    fail "claude-log 19990101 should error (rc=$rc, out=$out)"
+fi
+
+# Multi-word PAGER (e.g. PAGER="less -R") must work via eval path.
+out=$(HOME="$fake_home" PAGER="cat -" claude-log)
+if [[ -n "$out" ]]; then
+    pass "claude-log handles multi-word PAGER"
+else
+    fail "claude-log multi-word PAGER produced no output"
+fi
+
 exit $failed

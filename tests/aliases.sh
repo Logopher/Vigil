@@ -163,4 +163,149 @@ else
     fail "claude-dev did not forward positional arg (got: $args)"
 fi
 
+# -----------------------------------------------------------------------------
+section "claude-strict passes --settings policies/strict.json + user args"
+CAPTURE_FILE=$(mktmp_file)
+export CAPTURE_FILE
+claude-strict --model claude-sonnet-4-6 "strict prompt"
+
+args=$(grep '^ARGS=' "$CAPTURE_FILE" | head -1 | cut -d= -f2-)
+if [[ "$args" == *"--settings "*"/policies/strict.json"* ]]; then
+    pass "claude-strict passes --settings policies/strict.json"
+else
+    fail "claude-strict did not pass expected --settings (got: $args)"
+fi
+if [[ "$args" == *"--model claude-sonnet-4-6"* ]]; then
+    pass "claude-strict forwards user flags"
+else
+    fail "claude-strict did not forward --model (got: $args)"
+fi
+if [[ "$args" == *"strict prompt"* ]]; then
+    pass "claude-strict forwards user positional args"
+else
+    fail "claude-strict did not forward positional arg (got: $args)"
+fi
+
+# -----------------------------------------------------------------------------
+section "claude-yolo passes --settings policies/yolo.json + user args"
+CAPTURE_FILE=$(mktmp_file)
+export CAPTURE_FILE
+claude-yolo --print "yolo prompt"
+
+args=$(grep '^ARGS=' "$CAPTURE_FILE" | head -1 | cut -d= -f2-)
+if [[ "$args" == *"--settings "*"/policies/yolo.json"* ]]; then
+    pass "claude-yolo passes --settings policies/yolo.json"
+else
+    fail "claude-yolo did not pass expected --settings (got: $args)"
+fi
+if [[ "$args" == *"--print"* ]]; then
+    pass "claude-yolo forwards user flags"
+else
+    fail "claude-yolo did not forward --print (got: $args)"
+fi
+if [[ "$args" == *"yolo prompt"* ]]; then
+    pass "claude-yolo forwards user positional args"
+else
+    fail "claude-yolo did not forward positional arg (got: $args)"
+fi
+
+# -----------------------------------------------------------------------------
+section "Env scrub: credential vars stripped, allowlist preserved"
+# Re-source aliases to restore the real _claude_run_with_logging — the
+# scrub happens inside it and earlier tests have stubbed it out.
+unset -f _claude_run_with_logging
+# shellcheck source=../claude-aliases.sh
+source "$REPO_DIR/claude-aliases.sh"
+
+shim_dir=$(mktmp_dir)
+fake_home=$(mktmp_dir)
+
+# Stub script(1) to bypass the real binary and exec the inner command
+# directly. Recognizes both util-linux (-B file -c cmd) and BSD
+# ([-q] file cmd...) forms used by the production wrapper.
+cat > "$shim_dir/script" <<'STUB'
+#!/usr/bin/env bash
+case "$1" in
+    -B)
+        shift; shift; shift  # drop -B, logfile, -c
+        exec bash -c "$1"
+        ;;
+    -q)
+        shift; shift  # drop -q, logfile
+        exec "$@"
+        ;;
+    *)
+        echo "stub script: unrecognized form: $*" >&2
+        exit 1
+        ;;
+esac
+STUB
+chmod +x "$shim_dir/script"
+
+# Stub claude: dump its inherited env to a capture file so the test
+# can assert on what survived the scrub.
+ENV_CAPTURE=$(mktmp_file)
+export ENV_CAPTURE
+cat > "$shim_dir/claude" <<STUB
+#!/usr/bin/env bash
+env > "$ENV_CAPTURE"
+STUB
+chmod +x "$shim_dir/claude"
+
+# Allow ENV_CAPTURE through the scrub so the stub can write it back.
+_claude_env_allowlist+=(ENV_CAPTURE)
+
+# Set credential-style vars (should be scrubbed) and one of each
+# allowlist category (should survive).
+export AWS_SECRET_ACCESS_KEY=should-be-scrubbed
+export GITHUB_TOKEN=should-be-scrubbed
+export ANTHROPIC_API_KEY=should-be-scrubbed
+export NPM_TOKEN=should-be-scrubbed
+export MY_CUSTOM_SECRET=should-be-scrubbed
+export LC_TEST_VAR=should-survive
+export GIT_AUTHOR_NAME=should-survive
+
+HOME="$fake_home" PATH="$shim_dir:$PATH" claude
+
+assert_absent() {
+    local var="$1"
+    if grep -q "^$var=" "$ENV_CAPTURE"; then
+        fail "env scrub: $var leaked into claude env"
+    else
+        pass "env scrub: $var removed"
+    fi
+}
+assert_present() {
+    local var="$1"
+    if grep -q "^$var=" "$ENV_CAPTURE"; then
+        pass "env scrub: $var preserved"
+    else
+        fail "env scrub: $var missing from claude env"
+    fi
+}
+
+assert_absent AWS_SECRET_ACCESS_KEY
+assert_absent GITHUB_TOKEN
+assert_absent ANTHROPIC_API_KEY
+assert_absent NPM_TOKEN
+assert_absent MY_CUSTOM_SECRET
+
+assert_present PATH
+assert_present HOME
+assert_present LC_TEST_VAR
+assert_present GIT_AUTHOR_NAME
+assert_present CLAUDE_SESSION_ID
+assert_present CLAUDE_LOG_DIR
+
+# Subshell isolation: the wrapper unsets vars inside its subshell, so
+# the parent test shell must still see the originals.
+if [[ "${AWS_SECRET_ACCESS_KEY:-}" == "should-be-scrubbed" ]]; then
+    pass "env scrub: parent shell unaffected (subshell isolation)"
+else
+    fail "env scrub: parent AWS_SECRET_ACCESS_KEY changed; subshell leaked"
+fi
+
+unset AWS_SECRET_ACCESS_KEY GITHUB_TOKEN ANTHROPIC_API_KEY NPM_TOKEN \
+      MY_CUSTOM_SECRET LC_TEST_VAR GIT_AUTHOR_NAME ENV_CAPTURE
+
 exit $failed

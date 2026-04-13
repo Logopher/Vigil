@@ -8,7 +8,7 @@ A configuration baseline and deployment mechanism for Claude Code sessions. It s
 
 1. A default profile that is safe by construction — plan mode, a hard deny list covering destructive shell patterns, session-logging hooks, and baseline agent definitions.
 2. A small set of permission policies (`strict`, `dev`, `yolo`) that can be selected per session to change how interruptive Claude's permission gates are.
-3. An installer that copies the repo's profiles, policies, hooks, and shell aliases into `~/.config/claude-config/` and symlinks `~/.claude` to the default profile.
+3. An installer that copies the repo's profiles, policies, hooks, and shell aliases into `~/.config/claude-config/` and `~/.claude/`.
 
 ## Problem being solved
 
@@ -77,15 +77,27 @@ The sandbox is also the layer that addresses sophisticated attacks. Permission-s
 
 ## Installation model
 
-`install.sh` performs a single operation with two branches:
+`install.sh` performs these steps:
 
-1. Move any existing `~/.config/claude-config/` to `~/.config/claude-config.bak-<timestamp>/` (unless `--force`).
-2. Copy `profiles/`, `policies/`, and `claude-aliases.sh` into `~/.config/claude-config/`.
-3. For each `settings.template.json`, substitute `{{PROFILE_DIR}}` with the installed profile path and write `settings.json` alongside.
-4. Move any existing `~/.claude` aside and symlink `~/.claude` to the default profile.
-5. Print a reminder to source `claude-aliases.sh` from the user's shell rc.
+1. Check every destination for existing content. If any of `~/.claude`, `~/.config/claude-config/claude-aliases.sh`, `~/.config/claude-config/policies/<name>.json`, or `~/.config/claude-config/profiles/default` already exists, the installer prints the conflicting paths to stderr and exits non-zero. There is no `--force` flag.
+2. Copy `claude-aliases.sh` to `~/.config/claude-config/claude-aliases.sh`.
+3. For each policy file, substitute `{{HOME}}` with the user's home directory and write to `~/.config/claude-config/policies/<name>.json`. Non-template policy files (`yolo.json`) are copied verbatim.
+4. Copy the default profile directly into `~/.claude/`. Substitute `{{PROFILE_DIR}}` with `$HOME/.claude` and `{{HOME}}` with the user's home directory when processing `settings.template.json`.
+5. Ensure hook scripts are executable.
+6. Create a convenience symlink at `~/.config/claude-config/profiles/default` pointing to `~/.claude`, so the multi-profile layout convention holds for docs and any future additional profiles.
+7. Print a reminder to source `claude-aliases.sh` from the user's shell rc.
 
-The installer is deliberately simple: copy, substitute, symlink. No dependency installation, no service registration, no shell-rc editing. Every path it touches is owned by the user; no `sudo` is required.
+The installer is deliberately simple: check, copy, substitute, symlink. No dependency installation, no service registration, no shell-rc editing. Every path it touches is owned by the user; no `sudo` is required.
+
+### Why refuse rather than overwrite
+
+The default profile shares a directory (`~/.claude`) with Claude Code's own runtime state — credentials (`.credentials.json`), session history (`history.jsonl`, `sessions/`), file edit history (`file-history/`), cache, and per-project state. Automatic overwrite-on-reinstall would risk clobbering credentials and session history.
+
+The installer declines to distinguish "files we own" from "Claude Code's runtime state" heuristically, because heuristics here have a failure mode where the installer silently deletes something valuable. Refusing to run when conflicts exist forces the operator to inspect the state explicitly and move anything worth keeping before proceeding.
+
+### Why `{{PROFILE_DIR}}` resolves to `~/.claude`
+
+Hook references in `settings.json` (e.g., `command: {{PROFILE_DIR}}/hooks/prune-worktrees.sh`) are substituted to `$HOME/.claude/hooks/prune-worktrees.sh` — the canonical, real path — rather than to the convenience symlink at `~/.config/claude-config/profiles/default`. Hook execution never resolves through a symlink, which avoids a class of sandbox-interaction bugs and keeps the runtime path identity-stable if the symlink is later changed or removed.
 
 ## Session wrappers
 

@@ -12,9 +12,14 @@ cd ~/code/claude-config
 ./install.sh
 ```
 
-The installer copies the repo into `~/.config/claude-config/` and symlinks `~/.claude` to the default profile. Any existing `~/.config/claude-config/` or `~/.claude` is moved to a `.bak-<timestamp>` path; pass `--force` to overwrite instead.
+The installer copies into two locations:
 
-Add to your `~/.bashrc` (or equivalent) so the session wrapper exports `CLAUDE_SESSION_ID` / `CLAUDE_LOG_DIR` and records each session under `~/claude-logs/`:
+- `~/.claude/` — the default profile (real directory; shared with Claude Code's runtime state).
+- `~/.config/claude-config/` — the shell alias, the policy files, and a convenience symlink to the default profile.
+
+The installer **refuses to run if any destination already exists**, including a prior `~/.claude`, any existing alias or policy file, or a prior `profiles/default`. There is no `--force` flag. Re-installation requires manual cleanup first — this is intentional, because `~/.claude` may contain Claude Code runtime state (credentials, sessions, history) that the installer will not preserve for you.
+
+Add to your `~/.bashrc` (or equivalent) so the `claude` and `claude-dev` wrapper functions are defined, sessions are recorded under `~/claude-logs/`, and `CLAUDE_SESSION_ID` / `CLAUDE_LOG_DIR` are exported for the logging hooks:
 
 ```
 [ -f ~/.config/claude-config/claude-aliases.sh ] && source ~/.config/claude-config/claude-aliases.sh
@@ -22,18 +27,30 @@ Add to your `~/.bashrc` (or equivalent) so the session wrapper exports `CLAUDE_S
 
 ## Updating
 
-Repo edits do not change session behavior until the installer runs:
+Repo edits do not change session behavior until the installer runs. Because the installer refuses to overwrite existing files, an update involves moving runtime state out of the way first:
 
 ```
 cd ~/code/claude-config
 git pull            # or make local edits
+
+# Preserve Claude Code runtime state, then remove the old install.
+mkdir -p /tmp/claude-state
+mv ~/.claude/{.credentials.json,history.jsonl,backups,cache,file-history,ide,projects,session-env,sessions,shell-snapshots} /tmp/claude-state/ 2>/dev/null || true
+rm -rf ~/.claude ~/.config/claude-config
+
 ./install.sh
+
+# Restore runtime state.
+mv /tmp/claude-state/* ~/.claude/ 2>/dev/null || true
+rmdir /tmp/claude-state
 ```
+
+The clumsiness is deliberate. A friendlier workflow belongs in a future `update.sh` that knows which files are "ours" versus Claude Code's; designing that safely is tracked as a Stage 1 gap.
 
 ## Profiles and policies
 
-- The **default profile** (`profiles/default/`) is plan-mode with a hard deny list — safe by construction. It is symlinked as `~/.claude` by the installer and applies to any session launched without an explicit profile.
-- **Policies** (`policies/*.json`) are permission overlays selected per session via `--settings`:
+- The **default profile** is safe by construction — plan mode, a hard deny list, hooks, and sandbox rules. It lives at `~/.claude/` and applies to any Claude Code session.
+- **Policies** are permission overlays selected per session via `--settings`:
 
   ```
   claude --settings ~/.config/claude-config/policies/dev.json     # uninterrupted dev work, safety gates on risky ops
@@ -41,4 +58,12 @@ git pull            # or make local edits
   claude --settings ~/.config/claude-config/policies/yolo.json    # bypass confirmations (retains rm and sudo denies)
   ```
 
-- Additional profiles may live alongside `default/` and are selected by setting `CLAUDE_CONFIG_DIR` for the session.
+- For project-scoped dev sessions (cd to git root, apply the `dev` policy, session logging), use the `claude-dev` shell function defined in `claude-aliases.sh`.
+
+## Further reading
+
+- [`DESIGN.md`](DESIGN.md) — design choices and rationale.
+- [`THREAT_MODEL.md`](THREAT_MODEL.md) — what this tool protects against, what it does not.
+- [`COMPATIBILITY.md`](COMPATIBILITY.md) — per-platform support status.
+- [`AUDIENCE.md`](AUDIENCE.md) — who the tool is and is not for.
+- [`LIFECYCLE.md`](LIFECYCLE.md) — project stage framework.

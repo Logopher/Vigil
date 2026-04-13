@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Purpose
 
-This repo holds the user's personal Claude Code configuration, also intended for deployment to friends' machines. `./install.sh` copies the contents into `~/.config/claude-config/` and symlinks `~/.claude` to the default profile. Edits here only take effect after re-running the installer — the copy is a deliberate firewall between repo state and live session behavior.
+This repo holds the user's personal Claude Code configuration, also intended for deployment to friends' machines. `./install.sh` copies the default profile directly into `~/.claude/` (a real directory) and installs the shell alias, policies, and a convenience symlink under `~/.config/claude-config/`. Edits here only take effect after re-running the installer — the copy is a deliberate firewall between repo state and live session behavior.
 
 Repo layout:
 
@@ -17,10 +17,10 @@ Repo layout:
 
 Two layers of configuration, merged by the Claude Code harness at session start:
 
-1. **Profile** (`~/.claude/settings.json`, reached through the `~/.claude → profiles/default` symlink) — sandbox mode, the baseline `deny` list, and hooks wiring. Default profile is plan-mode with a hard `deny` list covering `rm`, `sudo`, non-read-only `git`, network fetchers (`curl`, `wget`), language runtimes (`node`, `python`, `python3`, `npx`), and a few risky tools (`npm publish`, `docker`, `kubectl`).
+1. **Profile** (`~/.claude/settings.json`) — sandbox mode, the baseline `deny` list, and hooks wiring. Default profile is plan-mode with a hard `deny` list covering `rm`, `sudo`, non-read-only `git`, network fetchers (`curl`, `wget`), SSH-family tools (`ssh`, `scp`, `rsync`, etc.), language runtimes (`node`, `python`, `python3`, `npx`), a few risky tools (`npm publish`, `docker`, `kubectl`), and credential paths (`~/.ssh/`, `~/.aws/`, etc.). `~/.claude/` is a real directory shared with Claude Code's runtime state (credentials, sessions, history). A convenience symlink at `~/.config/claude-config/profiles/default` points to `~/.claude/`.
 2. **Policy** (optional, via `claude --settings .../policies/<name>.json`) — permissions overlay. `strict` matches the profile baseline; `dev` enables `acceptEdits` with an allow list for routine dev commands and ask-gates for risky ones; `yolo` bypasses confirmations except for `rm` and `sudo`. Hooks from the profile persist across policy overrides.
 
-A non-default profile is selected by setting `CLAUDE_CONFIG_DIR` for the session; the baseline `~/.claude` symlink to the default profile provides a safe default.
+A non-default profile is selected by setting `CLAUDE_CONFIG_DIR` for the session; the default (no env var) reads from `~/.claude`, which is the default profile.
 
 Hooks registered in the default profile:
 

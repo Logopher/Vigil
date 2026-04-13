@@ -71,6 +71,7 @@ The script removes only files placed by `install.sh` and leaves Claude Code runt
   | `claude-yolo` | `claude --settings .../policies/yolo.json` | bypasses confirmations; retains `rm` and `sudo` denies |
 
 - `claude-log` opens a session transcript in `$PAGER`. With no arguments it shows the most recent session; `claude-log -1` shows the previous one (`-2` the one before that, etc.); `claude-log 20260413` (or `2026-04-13`) opens the most recent transcript matching that date prefix.
+- `claude-log-prune` deletes old session logs from `~/claude-logs/`. A SessionStart hook runs the same pruner automatically with defaults of 90 days and 2G total. For manual pruning pass custom thresholds, e.g. `claude-log-prune --older-than 30d --dry-run`.
 
 ## Further reading
 

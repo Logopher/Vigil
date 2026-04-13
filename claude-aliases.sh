@@ -157,3 +157,17 @@ claude-log() {
     # Target is shell-quoted to survive paths with spaces.
     eval "$pager $(printf '%q' "$target")"
 }
+
+# Prune ~/claude-logs. Forwards args to scripts/prune-logs.py; run
+# `claude-log-prune --help` for flags. The same script runs
+# automatically at SessionStart (90d age, 2G cap) via the profile
+# hook; this wrapper is for manual on-demand pruning with custom
+# thresholds or --dry-run.
+claude-log-prune() {
+    local script="$HOME/.config/claude-config/scripts/prune-logs.py"
+    if [[ ! -f "$script" ]]; then
+        echo "claude-log-prune: $script not found" >&2
+        return 1
+    fi
+    python3 "$script" "$@"
+}

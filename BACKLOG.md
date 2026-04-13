@@ -24,7 +24,6 @@ These are honest limits, not bugs to fix. Listed so a maintainer encountering od
 Each item is substantial enough to deserve its own session. Pick one, plan it, ship it, then return.
 
 - **Active-policy banner at session start.** A second `SessionStart` hook that prints which policy is active, so the operator doesn't have to remember whether they're in `dev` or `yolo`. The hook can't read shell-exported vars (the harness scrubs hook env — see project memory), so the design has to derive the policy from `settings.json` path inspection or a dropped marker file. Plan first.
-- **Session log retention / size management.** `~/claude-logs/` accumulates one `.log` (raw `script(1)` capture, ~MB-scale per session) and one `.txt` (post-processed transcript) per session, indefinitely. Daily use means gigabytes per year. Wants `claude-config logs prune --older-than 90d`, default rotation in docs, possibly a sidecar index (date, first prompt, working dir) and per-month archival into compressed tarballs.
 - **`git pre-push` hook tooling + `claude-init-repo` helper.** A hook that requires interactive confirmation before any push, plus a helper that installs the hook into a target repo. Directly addresses the commit-poisoning gap. Larger than a typical "easy" feature.
 
 ## Stage 2 — needs versioning / wider design

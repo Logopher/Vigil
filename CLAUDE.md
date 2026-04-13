@@ -25,6 +25,7 @@ A non-default profile is selected by setting `CLAUDE_CONFIG_DIR` for the session
 Hooks registered in the default profile:
 
 - `SessionStart` / `SessionEnd` → `hooks/prune-worktrees.sh`
+- `SessionStart` → `hooks/prune-logs.sh` (retention for `~/claude-logs/`; defaults 90d age, 2G cap)
 - `PreToolUse` → `hooks/log-tool-use.sh` (appends JSON payload to the session log)
 - `PostToolUse` → `hooks/log-tool-result.sh`
 

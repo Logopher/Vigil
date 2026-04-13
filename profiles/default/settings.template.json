@@ -65,6 +65,11 @@
             "type": "command",
             "command": "{{PROFILE_DIR}}/hooks/prune-worktrees.sh",
             "timeout": 15
+          },
+          {
+            "type": "command",
+            "command": "{{PROFILE_DIR}}/hooks/prune-logs.sh",
+            "timeout": 15
           }
         ]
       }

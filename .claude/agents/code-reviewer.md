@@ -56,7 +56,17 @@ Flag any change that weakens these even if it appears to still work.
 - The architecture description matches the current layout (hooks location, profile/policy split, installer target).
 - The rule that Claude never runs `install.sh` is preserved wherever it is stated.
 
-### 6. Commit hygiene
+### 6. Cross-platform correctness
+
+Platform targets are tracked in `COMPATIBILITY.md`. Review against that matrix.
+
+- GNU-only coreutils flags used without a platform guard: `readlink -f`, `sed -i` without BSD's empty-string workaround, `date -d`, `stat --format`, `find` features beyond what BSD supports.
+- `script(1)` invocation correct for every platform currently marked "Tested" or "Adapted" — BSD uses `script [-q] file cmd...`, util-linux uses `script -B file -c cmd`.
+- New `case "$(uname)" in …` branches cover all platforms listed in `COMPATIBILITY.md`.
+- `COMPATIBILITY.md` updated when branching is added, a platform's status changes, or a new portability concern is discovered.
+- No bash features used beyond bash 3.2 (macOS's `/bin/bash`).
+
+### 7. Commit hygiene
 
 - One logical unit per commit.
 - No TODO, FIXME, placeholders.

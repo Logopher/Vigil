@@ -50,6 +50,17 @@ Work through each section. Report findings as a numbered list with file path, li
 - Changes comply with the hard rules in the project's `CLAUDE.md`.
 - Any spec or style guide the project references is respected.
 
+### 7. Cross-platform correctness
+
+Applies when the project targets multiple operating systems (check for a `COMPATIBILITY.md` or equivalent).
+
+- GNU-only coreutils flags used without a platform guard: `readlink -f`, `sed -i` without the BSD `-i ''` workaround, `date -d`, `find -print0` assumed present, `stat --format`.
+- `script(1)`, `cp`, `mv`, `ln`, `grep`, `awk`, `xargs` invoked with flags that differ between GNU and BSD.
+- Shell features assumed beyond what the project's minimum bash supports (macOS ships 3.2).
+- `~` used inside double-quoted strings — bash does not expand tildes there; use `"$HOME"`.
+- New platform branches (`case "$(uname)" in …`) cover all platforms the project claims to support.
+- The project's compatibility document updated when branching is added or platform status changes.
+
 ## Output format
 
 ```

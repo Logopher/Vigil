@@ -64,10 +64,19 @@ This layer is load-bearing for prompt-injection and buggy-agent threats. Sandbox
 
 Always-on protections for `.git/` (non-claude subfolders), `.gitconfig`, shell RC files, `.mcp.json`, and specific `.claude/` entries. Not configurable from this tool; documented here because they're part of the operative defense.
 
+### Env-scrub layer (claude-aliases.sh wrappers)
+
+The shell wrappers (`claude`, `claude-dev`) launch Claude in a subshell whose environment has been reduced to a curated allowlist (PATH, HOME, locale, SSH agent socket, GPG, XDG, editor, display, `CLAUDE_*`, plus `LC_*` and `GIT_*` by prefix). Credential vars (`AWS_*`, `GITHUB_*`, `ANTHROPIC_API_KEY`, `NPM_TOKEN`, `*_SECRET`, `*_PASSWORD`, …) are unset before Claude inherits them. **Catches:** environment-variable interpolation as an exfiltration channel for credentials sourced from the operator's shell. **Does not catch:** secrets read from disk by allowed paths, secrets in shell history, or the case where an operator launches `claude` directly without the wrapper.
+
+The allowlist is extensible from the operator's own `~/.bashrc`:
+
+```
+_claude_env_allowlist+=(AWS_PROFILE AWS_REGION)
+```
+
 ### Out of scope
 
 - **Commit review.** A poisoned commit from a prompt-injected agent is not detectable by a config tool. Use a git `pre-push` hook or human code review.
-- **Environment variable disclosure.** Claude can interpolate `$SECRETS_VAR` into any tool call. Scrub sensitive env vars at shell invocation time; this tool does not.
 - **Social engineering.** The tool cannot protect against an operator who is manipulated into approving malicious actions or elevating to `yolo` for an attack surface.
 - **Network-level MITM, supply chain, OS compromise, hardware attacks.** Out of scope entirely.
 

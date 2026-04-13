@@ -1,4 +1,13 @@
 _claude_run_with_logging() {
+    # Refresh sandbox.filesystem.denyRead before each session. Paths that
+    # have become symlinks, disappeared, or changed type would otherwise
+    # cause bubblewrap to fail closed for every subprocess. Cheap to run;
+    # silently skipped if the filter or python3 is missing.
+    local filter="$HOME/.config/claude-config/scripts/filter-sandbox-denies.py"
+    if [[ -f "$filter" ]] && command -v python3 >/dev/null 2>&1; then
+        python3 "$filter" >/dev/null || true
+    fi
+
     export CLAUDE_SESSION_ID=$(date +%Y%m%d-%H%M%S)
     export CLAUDE_LOG_DIR="$HOME/claude-logs"
     mkdir -p "$CLAUDE_LOG_DIR"

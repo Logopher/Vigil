@@ -173,6 +173,14 @@ def _normalize_matcher(entry: str):
     Shapes returned:
       ("bash", tokens: tuple[str, ...], is_prefix: bool)
       ("path", tool: str, glob: str)
+
+    Only the `:*` suffix produces is_prefix=True. Space-form Bash matchers
+    (e.g., the profile's "Bash(git checkout -- *)") fall through to
+    is_prefix=False and are compared by exact token-tuple equality; any `*`
+    inside a space-form is treated as a literal token, not a wildcard.
+    Accepted because CLAUDE.md forbids the space form and Tier 1 static.sh
+    flags single-word occurrences; the one surviving multi-word entry does
+    not shape subsumption for any shipped policy.
     """
     m = MATCHER_RE.match(entry)
     if not m:

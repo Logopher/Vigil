@@ -78,7 +78,7 @@ The script removes only files placed by `install.sh` and leaves Claude Code runt
   | `claude-strict` | `claude --settings .../policies/strict.json` | same as the default profile baseline, made explicit |
   | `claude-yolo` | `claude --settings .../policies/yolo.json` | bypasses confirmations; retains `rm` and `sudo` denies |
 
-- `claude-log` opens a session transcript in `$PAGER`. With no arguments it shows the most recent session; `claude-log -1` shows the previous one (`-2` the one before that, etc.); `claude-log 20260413` (or `2026-04-13`) opens the first transcript with that date prefix.
+- `claude-log` opens a session transcript in `$PAGER`. With no arguments it shows the most recent session; `claude-log -1` shows the previous one (`-2` the one before that, etc.); `claude-log 20260413` (or `2026-04-13`) opens the most recent transcript matching that date prefix.
 
 ## Further reading
 

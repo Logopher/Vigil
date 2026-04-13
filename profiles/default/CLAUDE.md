@@ -70,3 +70,37 @@ For non-trivial changes:
 6. Commit only after gates pass.
 
 For small isolated fixes (single-file, no interface changes), steps 1–2 may be skipped at the developer's discretion.
+
+### Standards for new agents
+
+**File structure.** Agent definitions live at `.claude/agents/<name>.md` (or `~/.claude/agents/<name>.md` for profile-level agents). Each file follows a consistent shape:
+
+1. **Title and one-line purpose.**
+2. **When to invoke.** Specific triggering situations.
+3. **Inputs.** What the agent expects to receive.
+4. **Process** (planners) or **Review checklist** (reviewers). Numbered steps or categorized sections.
+5. **Output.** What the agent returns. For reviewers, a concrete format with severity levels (blocker / warning / nit).
+6. **What not to do.** Explicit boundaries — especially "do not write code" for planners, "do not rewrite the code" for reviewers.
+
+Directive tone. Concise: the agent re-reads this file at every invocation.
+
+**When to create a new agent.** Every project starts with two baselines: `architect` (planning, no code) and `code-reviewer` (mandatory commit gate). Resist adding more until signal appears.
+
+Split a specialist off when:
+
+- The generalist reviewer's checklist branches on file type or domain.
+- A class of defect keeps being missed.
+- Rules from one domain leak into unrelated files.
+- Reference material is large and only applies to a subset of changes.
+- Invocation should be conditional on specific file changes (different triggers).
+
+Two signals together cross the threshold. One signal alone is usually premature.
+
+**Before splitting, try folding.** Add the concern as a new numbered section in the existing reviewer. If misses continue across two or more reviews, promote to its own agent. Folding is cheap to unfold; splitting prematurely creates coordination overhead with nothing to show.
+
+**Anti-patterns.**
+
+- Agents that write implementation code or take actions. Agents review, plan, or advise; execution is the main agent's job.
+- One agent doing both planning and review.
+- Agents created for hypothetical future needs.
+- Agents whose checklist overlaps 80% with another agent's.

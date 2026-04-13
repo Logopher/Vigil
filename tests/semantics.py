@@ -6,8 +6,12 @@ cleanly with the profile.
 """
 import difflib
 import json
+import re
 import sys
 from pathlib import Path
+
+PATH_TOOLS = ("Read", "Edit", "Write", "MultiEdit", "NotebookEdit")
+MATCHER_RE = re.compile(r"^([A-Za-z]+)\((.*)\)$")
 
 REPO_DIR = Path(__file__).resolve().parent.parent
 PROFILE = REPO_DIR / "profiles" / "default" / "settings.template.json"
@@ -43,6 +47,10 @@ def deny_of(doc: dict) -> list[str]:
 
 def allow_of(doc: dict) -> list[str]:
     return doc.get("permissions", {}).get("allow", [])
+
+
+def ask_of(doc: dict) -> list[str]:
+    return doc.get("permissions", {}).get("ask", [])
 
 
 def deep_merge(left, right):
@@ -141,6 +149,42 @@ def check_deep_merge(profile: dict, policies: list[tuple[str, dict]]) -> None:
             fail(f"{name}: merged result missing keys: {' '.join(missing)}")
 
 
+def check_path_representation(profile: dict, policies: list[tuple[str, dict]]) -> None:
+    section("Path-bearing matchers avoid non-canonical tokens")
+    # Every home-relative path in a Read/Edit/Write/MultiEdit/NotebookEdit
+    # matcher must flow through the `{{HOME}}` token so the installer owns
+    # the substitution. Forbid literal `~` (the installer does not expand
+    # tildes), bare `$HOME`/`${HOME}` (bypasses the canonical token), and
+    # `..` segments (non-canonical). Whether the runtime matcher tolerates
+    # variant representations is unknowable from outside the harness; this
+    # check sidesteps that by mandating one authoring form for our inputs.
+    sources = [("profile", profile)] + [(n, p) for n, p in policies]
+    for name, doc in sources:
+        offenders: list[tuple[str, str, str]] = []
+        for bucket, entries in (
+            ("allow", allow_of(doc)),
+            ("deny", deny_of(doc)),
+            ("ask", ask_of(doc)),
+        ):
+            for entry in entries:
+                m = MATCHER_RE.match(entry)
+                if not m or m.group(1) not in PATH_TOOLS:
+                    continue
+                arg = m.group(2)
+                if "~" in arg:
+                    offenders.append((bucket, entry, "literal '~'"))
+                if "$HOME" in arg or "${HOME}" in arg:
+                    offenders.append((bucket, entry, "shell-style $HOME"))
+                # match `..` as a path segment, not `...` or `foo..bar`
+                if re.search(r"(^|/)\.\.(/|$)", arg):
+                    offenders.append((bucket, entry, "non-canonical '..' segment"))
+        if not offenders:
+            pass_(f"{name}: path-bearing matchers are canonical")
+        else:
+            for bucket, entry, reason in offenders:
+                fail(f"{name}: {bucket} entry '{entry}' contains {reason}")
+
+
 def main() -> int:
     profile = load(PROFILE)
     dev = load(DEV)
@@ -153,6 +197,7 @@ def main() -> int:
     check_dev_superset(profile, dev)
     check_yolo_guards(yolo)
     check_allow_deny_noncontradiction(profile, policies)
+    check_path_representation(profile, policies)
     check_deep_merge(profile, policies)
 
     return 1 if failed else 0

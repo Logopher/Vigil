@@ -61,7 +61,7 @@ section "Update on never-installed home"
 home=$(mktmp)
 update_into "$home"
 check_present "settings.json"      "$home/.claude/settings.json"
-check_present "claude-aliases.sh"  "$home/.config/claude-config/claude-aliases.sh"
+check_present "claude-aliases.sh"  "$home/.config/vigil/claude-aliases.sh"
 
 # -----------------------------------------------------------------------------
 section "Bundled files refresh on update (stale local edits lost)"
@@ -113,21 +113,21 @@ check_present "bundled prune-worktrees" "$home/.claude/hooks/prune-worktrees.sh"
 section "User-added policy preserved; bundled also present"
 home=$(mktmp)
 install_into "$home"
-echo '{"team":"x"}' > "$home/.config/claude-config/policies/myteam.json"
+echo '{"team":"x"}' > "$home/.config/vigil/policies/myteam.json"
 update_into "$home"
 
-check_present "user policy"   "$home/.config/claude-config/policies/myteam.json"
-check_present "bundled dev"    "$home/.config/claude-config/policies/dev.json"
-check_present "bundled strict" "$home/.config/claude-config/policies/strict.json"
-check_present "bundled yolo"   "$home/.config/claude-config/policies/yolo.json"
+check_present "user policy"   "$home/.config/vigil/policies/myteam.json"
+check_present "bundled dev"    "$home/.config/vigil/policies/dev.json"
+check_present "bundled strict" "$home/.config/vigil/policies/strict.json"
+check_present "bundled yolo"   "$home/.config/vigil/policies/yolo.json"
 
 # -----------------------------------------------------------------------------
 section "Idempotent: second update is a no-op for file presence"
 update_into "$home"
 check_present "user policy after second update" \
-    "$home/.config/claude-config/policies/myteam.json"
+    "$home/.config/vigil/policies/myteam.json"
 check_present "bundled dev after second update" \
-    "$home/.config/claude-config/policies/dev.json"
+    "$home/.config/vigil/policies/dev.json"
 
 # -----------------------------------------------------------------------------
 section "Unknown subdir under ~/.claude preserved"

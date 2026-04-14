@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Refresh claude-config in place: uninstall → move user state aside
+# Refresh Vigil in place: uninstall → move user state aside
 # → reinstall → restore user state. Preserves Claude Code runtime
 # state and any user additions that did not originate from this repo.
 #
@@ -20,7 +20,7 @@ set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CLAUDE_DIR="$HOME/.claude"
-DEST_DIR="$HOME/.config/claude-config"
+DEST_DIR="$HOME/.config/vigil"
 
 assume_yes=0
 for arg in "$@"; do
@@ -29,10 +29,10 @@ for arg in "$@"; do
             cat <<USAGE
 Usage: ./update.sh [-y]
 
-Reinstalls claude-config over the existing install. Runtime state
+Reinstalls Vigil over the existing install. Runtime state
 in ~/.claude/ (credentials, sessions, history, projects, etc.) and
 user additions under ~/.claude/agents/, ~/.claude/hooks/, and
-~/.config/claude-config/ are preserved.
+~/.config/vigil/ are preserved.
 
 Pass -y to skip the confirmation prompt (and forward it to uninstall.sh).
 USAGE
@@ -47,7 +47,7 @@ USAGE
 done
 
 if [[ $assume_yes -eq 0 ]]; then
-    read -r -p "This will reinstall claude-config over your existing install. Continue? [y/N] " ans
+    read -r -p "This will reinstall Vigil over your existing install. Continue? [y/N] " ans
     case "$ans" in
         y|Y|yes|YES) ;;
         *) echo "Aborted." >&2; exit 1 ;;

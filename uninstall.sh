@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Uninstall claude-config. Removes only files placed by install.sh;
+# Uninstall Vigil. Removes only files placed by install.sh;
 # Claude Code runtime state in ~/.claude/ (credentials, sessions,
 # history, projects, etc.) is preserved, as are any user additions
 # under ~/.claude/agents/ and ~/.claude/hooks/ that did not originate
@@ -8,7 +8,7 @@ set -euo pipefail
 shopt -s nullglob
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-DEST_DIR="$HOME/.config/claude-config"
+DEST_DIR="$HOME/.config/vigil"
 CLAUDE_DIR="$HOME/.claude"
 
 display_path() { printf '%s' "${1/#$HOME/\~}"; }
@@ -95,7 +95,7 @@ for src in "$REPO_DIR/profiles/default/"*; do
 done
 
 if [[ ${#to_remove[@]} -eq 0 ]]; then
-    echo "Nothing to remove. claude-config does not appear to be installed." >&2
+    echo "Nothing to remove. Vigil does not appear to be installed." >&2
     exit 0
 fi
 

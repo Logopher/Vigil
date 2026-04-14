@@ -26,7 +26,7 @@ _claude_run_with_logging() (
     # Paths that have become symlinks, disappeared, or changed type
     # would otherwise cause bubblewrap to fail closed for every
     # subprocess. Cheap; silently skipped if the filter is missing.
-    local filter="$HOME/.config/claude-config/scripts/filter-sandbox-denies.py"
+    local filter="$HOME/.config/vigil/scripts/filter-sandbox-denies.py"
     if [[ -f "$filter" ]] && command -v python3 >/dev/null 2>&1; then
         python3 "$filter" >/dev/null || true
     fi
@@ -65,7 +65,7 @@ _claude_run_with_logging() (
     # Post-process the raw script(1) capture into a readable .txt
     # transcript alongside it. The .log keeps full TTY fidelity for
     # replay; the .txt is for actual reading and grep-ability.
-    local stripper="$HOME/.config/claude-config/scripts/strip-ansi.py"
+    local stripper="$HOME/.config/vigil/scripts/strip-ansi.py"
     if [[ -f "$stripper" && -f "$logfile" ]] && command -v python3 >/dev/null 2>&1; then
         python3 "$stripper" "$logfile" "${logfile%.log}.txt" 2>/dev/null || true
     fi
@@ -80,16 +80,16 @@ claude-dev() {
     project_root="$(git rev-parse --show-toplevel 2>/dev/null)" || project_root="$PWD"
     (
         cd "$project_root" || return 1
-        _claude_run_with_logging --settings "$HOME/.config/claude-config/policies/dev.json" "$@"
+        _claude_run_with_logging --settings "$HOME/.config/vigil/policies/dev.json" "$@"
     )
 }
 
 claude-strict() {
-    _claude_run_with_logging --settings "$HOME/.config/claude-config/policies/strict.json" "$@"
+    _claude_run_with_logging --settings "$HOME/.config/vigil/policies/strict.json" "$@"
 }
 
 claude-yolo() {
-    _claude_run_with_logging --settings "$HOME/.config/claude-config/policies/yolo.json" "$@"
+    _claude_run_with_logging --settings "$HOME/.config/vigil/policies/yolo.json" "$@"
 }
 
 # Open a session transcript in $PAGER. With no args, opens the most
@@ -164,7 +164,7 @@ claude-log() {
 # hook; this wrapper is for manual on-demand pruning with custom
 # thresholds or --dry-run.
 claude-log-prune() {
-    local script="$HOME/.config/claude-config/scripts/prune-logs.py"
+    local script="$HOME/.config/vigil/scripts/prune-logs.py"
     if [[ ! -f "$script" ]]; then
         echo "claude-log-prune: $script not found" >&2
         return 1

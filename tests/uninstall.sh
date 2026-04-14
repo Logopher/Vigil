@@ -64,14 +64,14 @@ home=$(mktmp)
 install_into "$home"
 uninstall_into "$home"
 
-check_absent "claude-aliases.sh"   "$home/.config/claude-config/claude-aliases.sh"
-check_absent "doctor.sh"           "$home/.config/claude-config/doctor.sh"
-check_absent "policies/dev.json"   "$home/.config/claude-config/policies/dev.json"
-check_absent "policies/strict.json" "$home/.config/claude-config/policies/strict.json"
-check_absent "policies/yolo.json"  "$home/.config/claude-config/policies/yolo.json"
+check_absent "claude-aliases.sh"   "$home/.config/vigil/claude-aliases.sh"
+check_absent "doctor.sh"           "$home/.config/vigil/doctor.sh"
+check_absent "policies/dev.json"   "$home/.config/vigil/policies/dev.json"
+check_absent "policies/strict.json" "$home/.config/vigil/policies/strict.json"
+check_absent "policies/yolo.json"  "$home/.config/vigil/policies/yolo.json"
 check_absent "scripts/filter-sandbox-denies.py" \
-    "$home/.config/claude-config/scripts/filter-sandbox-denies.py"
-check_absent "profiles/default symlink" "$home/.config/claude-config/profiles/default"
+    "$home/.config/vigil/scripts/filter-sandbox-denies.py"
+check_absent "profiles/default symlink" "$home/.config/vigil/profiles/default"
 check_absent "settings.json"       "$home/.claude/settings.json"
 check_absent "CLAUDE.md"           "$home/.claude/CLAUDE.md"
 
@@ -82,10 +82,10 @@ if [[ ! -d "$home/.claude" ]]; then
 else
     fail "~/.claude still present after empty uninstall"
 fi
-if [[ ! -d "$home/.config/claude-config" ]]; then
-    pass "~/.config/claude-config removed"
+if [[ ! -d "$home/.config/vigil" ]]; then
+    pass "~/.config/vigil removed"
 else
-    fail "~/.config/claude-config still present after empty uninstall"
+    fail "~/.config/vigil still present after empty uninstall"
 fi
 
 # -----------------------------------------------------------------------------

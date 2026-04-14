@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
-# Sanity-check an installed claude-config tree. Reports PASS / WARN /
+# Sanity-check an installed Vigil tree. Reports PASS / WARN /
 # FAIL per check; exits 0 if no FAIL, 1 otherwise. Read-only — never
 # modifies any file. Intended to be safe to run at any time.
 #
-# Targets the live install at ~/.claude and ~/.config/claude-config,
+# Targets the live install at ~/.claude and ~/.config/vigil,
 # not the repo. Re-run after any install / update / system change.
 set -uo pipefail
 shopt -s nullglob
 
-DEST_DIR="${HOME}/.config/claude-config"
+DEST_DIR="${HOME}/.config/vigil"
 CLAUDE_DIR="${HOME}/.claude"
 SETTINGS="${CLAUDE_DIR}/settings.json"
 

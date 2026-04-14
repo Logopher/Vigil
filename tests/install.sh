@@ -61,25 +61,25 @@ check_file() {
     fi
 }
 
-check_file "aliases at ~/.config/claude-config/claude-aliases.sh" \
-    "$home/.config/claude-config/claude-aliases.sh"
-check_file "doctor.sh at ~/.config/claude-config/doctor.sh" \
-    "$home/.config/claude-config/doctor.sh"
-if [[ -x "$home/.config/claude-config/doctor.sh" ]]; then
+check_file "aliases at ~/.config/vigil/claude-aliases.sh" \
+    "$home/.config/vigil/claude-aliases.sh"
+check_file "doctor.sh at ~/.config/vigil/doctor.sh" \
+    "$home/.config/vigil/doctor.sh"
+if [[ -x "$home/.config/vigil/doctor.sh" ]]; then
     pass "doctor.sh is executable"
 else
     fail "doctor.sh should be executable"
 fi
-check_file "policies/dev.json generated"            "$home/.config/claude-config/policies/dev.json"
-check_file "policies/strict.json generated"         "$home/.config/claude-config/policies/strict.json"
-check_file "policies/yolo.json copied"              "$home/.config/claude-config/policies/yolo.json"
+check_file "policies/dev.json generated"            "$home/.config/vigil/policies/dev.json"
+check_file "policies/strict.json generated"         "$home/.config/vigil/policies/strict.json"
+check_file "policies/yolo.json copied"              "$home/.config/vigil/policies/yolo.json"
 check_file "profile settings.json at ~/.claude"     "$home/.claude/settings.json"
 check_file "profile CLAUDE.md at ~/.claude"         "$home/.claude/CLAUDE.md"
 check_file "scripts/filter-sandbox-denies.py installed" \
-    "$home/.config/claude-config/scripts/filter-sandbox-denies.py"
+    "$home/.config/vigil/scripts/filter-sandbox-denies.py"
 
 # Template source files should NOT appear in the install.
-if [[ -f "$home/.config/claude-config/policies/dev.template.json" ]]; then
+if [[ -f "$home/.config/vigil/policies/dev.template.json" ]]; then
     fail "template source dev.template.json should not appear in install"
 else
     pass "template sources not present in install"
@@ -87,7 +87,7 @@ fi
 
 # -----------------------------------------------------------------------------
 section "Symlink direction: profiles/default -> ~/.claude"
-profile_symlink="$home/.config/claude-config/profiles/default"
+profile_symlink="$home/.config/vigil/profiles/default"
 if [[ -L "$profile_symlink" ]]; then
     actual=$(readlink "$profile_symlink")
     expected="$home/.claude"
@@ -117,11 +117,11 @@ while IFS= read -r f; do
         fail "unreplaced template marker in $f"
         leak=1
     fi
-done < <(find "$home/.config/claude-config" "$home/.claude" -type f \( -name '*.json' -o -name '*.sh' -o -name '*.md' \) 2>/dev/null)
+done < <(find "$home/.config/vigil" "$home/.claude" -type f \( -name '*.json' -o -name '*.sh' -o -name '*.md' \) 2>/dev/null)
 [[ $leak -eq 0 ]] && pass "no unreplaced {{...}} markers in installed files"
 
 # Positive checks: substituted values actually appear where expected.
-if grep -q "Read($home/.ssh/" "$home/.config/claude-config/policies/dev.json"; then
+if grep -q "Read($home/.ssh/" "$home/.config/vigil/policies/dev.json"; then
     pass "{{HOME}} substituted in dev.json"
 else
     fail "{{HOME}} not substituted in dev.json"
@@ -276,8 +276,8 @@ fi
 # -----------------------------------------------------------------------------
 section "Refusal: claude-aliases.sh already exists"
 home=$(mktmp)
-mkdir -p "$home/.config/claude-config"
-echo "existing" > "$home/.config/claude-config/claude-aliases.sh"
+mkdir -p "$home/.config/vigil"
+echo "existing" > "$home/.config/vigil/claude-aliases.sh"
 out=$(install_capture "$home")
 rc=$(printf '%s\n' "$out" | head -1)
 if [[ "$rc" != "0" ]]; then
@@ -289,8 +289,8 @@ fi
 # -----------------------------------------------------------------------------
 section "Refusal: a policy file already exists"
 home=$(mktmp)
-mkdir -p "$home/.config/claude-config/policies"
-echo '{}' > "$home/.config/claude-config/policies/dev.json"
+mkdir -p "$home/.config/vigil/policies"
+echo '{}' > "$home/.config/vigil/policies/dev.json"
 out=$(install_capture "$home")
 rc=$(printf '%s\n' "$out" | head -1)
 if [[ "$rc" != "0" ]]; then
@@ -302,7 +302,7 @@ fi
 # -----------------------------------------------------------------------------
 section "Refusal: profiles/default already exists"
 home=$(mktmp)
-mkdir -p "$home/.config/claude-config/profiles/default"
+mkdir -p "$home/.config/vigil/profiles/default"
 out=$(install_capture "$home")
 rc=$(printf '%s\n' "$out" | head -1)
 if [[ "$rc" != "0" ]]; then
@@ -314,8 +314,8 @@ fi
 # -----------------------------------------------------------------------------
 section "Refusal: doctor.sh already exists"
 home=$(mktmp)
-mkdir -p "$home/.config/claude-config"
-echo "existing" > "$home/.config/claude-config/doctor.sh"
+mkdir -p "$home/.config/vigil"
+echo "existing" > "$home/.config/vigil/doctor.sh"
 out=$(install_capture "$home")
 rc=$(printf '%s\n' "$out" | head -1)
 if [[ "$rc" != "0" ]]; then
@@ -327,7 +327,7 @@ fi
 # -----------------------------------------------------------------------------
 section "Refusal: scripts/ already exists"
 home=$(mktmp)
-mkdir -p "$home/.config/claude-config/scripts"
+mkdir -p "$home/.config/vigil/scripts"
 out=$(install_capture "$home")
 rc=$(printf '%s\n' "$out" | head -1)
 if [[ "$rc" != "0" ]]; then

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Install claude-config into ~/.config/claude-config and ~/.claude.
+# Install Vigil into ~/.config/vigil and ~/.claude.
 #
 # The installer refuses to run if any destination node already exists.
 # There is no --force flag: re-installation requires manual cleanup
@@ -14,7 +14,7 @@ set -euo pipefail
 shopt -s nullglob
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-DEST_DIR="$HOME/.config/claude-config"
+DEST_DIR="$HOME/.config/vigil"
 CLAUDE_DIR="$HOME/.claude"
 
 display_path() { printf '%s' "${1/#$HOME/\~}"; }
@@ -25,7 +25,7 @@ for arg in "$@"; do
             cat <<USAGE
 Usage: ./install.sh
 
-Copies claude-config into:
+Copies Vigil into:
   $(display_path "$DEST_DIR")/    (aliases, policies, profile symlink)
   $(display_path "$CLAUDE_DIR")/              (default profile — real directory)
 

@@ -59,7 +59,7 @@ snapshot_install() {
         Darwin|FreeBSD|NetBSD|OpenBSD) fmt=(stat -f '%N %z %m') ;;
         *)                              fmt=(stat -c '%n %s %Y') ;;
     esac
-    find "$home/.config/claude-config" "$home/.claude" -type f 2>/dev/null \
+    find "$home/.config/vigil" "$home/.claude" -type f 2>/dev/null \
         | sort \
         | while IFS= read -r f; do
             "${fmt[@]}" -- "$f"
@@ -176,7 +176,7 @@ else
 fi
 
 # Now drop a sourcing line into ~/.bashrc and re-run; warning should clear.
-echo 'source ~/.config/claude-config/claude-aliases.sh' > "$home/.bashrc"
+echo 'source ~/.config/vigil/claude-aliases.sh' > "$home/.bashrc"
 result=$(run_doctor "$home")
 rc=$(printf '%s\n' "$result" | head -1)
 out=$(printf '%s\n' "$result" | tail -n +2)
@@ -190,7 +190,7 @@ fi
 section "Installed copy is invokable via shebang"
 home=$(mktmp)
 install_into "$home"
-installed_doctor="$home/.config/claude-config/doctor.sh"
+installed_doctor="$home/.config/vigil/doctor.sh"
 rc=0
 HOME="$home" "$installed_doctor" >/dev/null 2>&1 || rc=$?
 if [[ "$rc" == "0" ]]; then

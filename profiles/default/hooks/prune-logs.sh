@@ -9,7 +9,7 @@
 
 set -eu
 
-script="$HOME/.config/claude-config/scripts/prune-logs.py"
+script="$HOME/.config/vigil/scripts/prune-logs.py"
 [ -f "$script" ] || exit 0
 command -v python3 >/dev/null 2>&1 || exit 0
 

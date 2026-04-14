@@ -54,7 +54,7 @@ esac
 section "Installed tree"
 
 for path in \
-    "$DEST_DIR/claude-aliases.sh" \
+    "$DEST_DIR/vigil-aliases.sh" \
     "$DEST_DIR/scripts/filter-sandbox-denies.py" \
     "$DEST_DIR/profiles/default" \
     "$CLAUDE_DIR" \
@@ -157,19 +157,19 @@ else
 fi
 
 # -----------------------------------------------------------------------------
-section "Shell rc sources claude-aliases.sh"
+section "Shell rc sources vigil-aliases.sh"
 
-aliases_path="$DEST_DIR/claude-aliases.sh"
+aliases_path="$DEST_DIR/vigil-aliases.sh"
 sourced_in=()
 for rc in "$HOME/.bashrc" "$HOME/.bash_profile" "$HOME/.zshrc" "$HOME/.profile"; do
-    if [[ -f "$rc" ]] && grep -q "claude-aliases.sh" "$rc" 2>/dev/null; then
+    if [[ -f "$rc" ]] && grep -q "vigil-aliases.sh" "$rc" 2>/dev/null; then
         sourced_in+=("$(display_path "$rc")")
     fi
 done
 if [[ ${#sourced_in[@]} -gt 0 ]]; then
-    report PASS "claude-aliases.sh referenced in: ${sourced_in[*]}"
+    report PASS "vigil-aliases.sh referenced in: ${sourced_in[*]}"
 else
-    report WARN "claude-aliases.sh not referenced in ~/.bashrc, ~/.bash_profile, ~/.zshrc, or ~/.profile (the wrapper that records sessions will not be active)"
+    report WARN "vigil-aliases.sh not referenced in ~/.bashrc, ~/.bash_profile, ~/.zshrc, or ~/.profile (the wrapper that records sessions will not be active)"
 fi
 
 # -----------------------------------------------------------------------------

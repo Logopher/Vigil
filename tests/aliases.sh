@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Tier 5 claude-aliases.sh behavior tests.
+# Tier 5 vigil-aliases.sh behavior tests.
 #
 # Strategy: source the aliases file, override the internal helper
 # _vigil_run_with_logging with a stub that records $PWD and args to
@@ -38,8 +38,8 @@ mktmp_file() {
 }
 
 # Source the aliases.
-# shellcheck source=../claude-aliases.sh
-source "$REPO_DIR/claude-aliases.sh"
+# shellcheck source=../vigil-aliases.sh
+source "$REPO_DIR/vigil-aliases.sh"
 
 # -----------------------------------------------------------------------------
 section "Function definitions present after sourcing"
@@ -221,8 +221,8 @@ section "Env scrub: credential vars stripped, allowlist preserved"
 # Re-source aliases to restore the real _vigil_run_with_logging — the
 # scrub happens inside it and earlier tests have stubbed it out.
 unset -f _vigil_run_with_logging
-# shellcheck source=../claude-aliases.sh
-source "$REPO_DIR/claude-aliases.sh"
+# shellcheck source=../vigil-aliases.sh
+source "$REPO_DIR/vigil-aliases.sh"
 
 shim_dir=$(mktmp_dir)
 fake_home=$(mktmp_dir)

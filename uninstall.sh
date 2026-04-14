@@ -21,7 +21,7 @@ for arg in "$@"; do
 Usage: ./uninstall.sh [-y]
 
 Removes files placed by install.sh:
-  $(display_path "$DEST_DIR/claude-aliases.sh")
+  $(display_path "$DEST_DIR/vigil-aliases.sh")
   $(display_path "$DEST_DIR/doctor.sh")
   $(display_path "$DEST_DIR/policies/")*.json
   $(display_path "$DEST_DIR/scripts/")*
@@ -59,7 +59,7 @@ add_if_exists() {
     fi
 }
 
-add_if_exists "$DEST_DIR/claude-aliases.sh"
+add_if_exists "$DEST_DIR/vigil-aliases.sh"
 add_if_exists "$DEST_DIR/doctor.sh"
 
 for src in "$REPO_DIR/policies/"*; do

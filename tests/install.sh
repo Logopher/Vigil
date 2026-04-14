@@ -61,8 +61,8 @@ check_file() {
     fi
 }
 
-check_file "aliases at ~/.config/vigil/claude-aliases.sh" \
-    "$home/.config/vigil/claude-aliases.sh"
+check_file "aliases at ~/.config/vigil/vigil-aliases.sh" \
+    "$home/.config/vigil/vigil-aliases.sh"
 check_file "doctor.sh at ~/.config/vigil/doctor.sh" \
     "$home/.config/vigil/doctor.sh"
 if [[ -x "$home/.config/vigil/doctor.sh" ]]; then
@@ -274,16 +274,16 @@ else
 fi
 
 # -----------------------------------------------------------------------------
-section "Refusal: claude-aliases.sh already exists"
+section "Refusal: vigil-aliases.sh already exists"
 home=$(mktmp)
 mkdir -p "$home/.config/vigil"
-echo "existing" > "$home/.config/vigil/claude-aliases.sh"
+echo "existing" > "$home/.config/vigil/vigil-aliases.sh"
 out=$(install_capture "$home")
 rc=$(printf '%s\n' "$out" | head -1)
 if [[ "$rc" != "0" ]]; then
-    pass "installer refuses when claude-aliases.sh exists"
+    pass "installer refuses when vigil-aliases.sh exists"
 else
-    fail "expected refusal on pre-existing claude-aliases.sh"
+    fail "expected refusal on pre-existing vigil-aliases.sh"
 fi
 
 # -----------------------------------------------------------------------------

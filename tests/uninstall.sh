@@ -64,7 +64,7 @@ home=$(mktmp)
 install_into "$home"
 uninstall_into "$home"
 
-check_absent "claude-aliases.sh"   "$home/.config/vigil/claude-aliases.sh"
+check_absent "vigil-aliases.sh"   "$home/.config/vigil/vigil-aliases.sh"
 check_absent "doctor.sh"           "$home/.config/vigil/doctor.sh"
 check_absent "policies/dev.json"   "$home/.config/vigil/policies/dev.json"
 check_absent "policies/strict.json" "$home/.config/vigil/policies/strict.json"

@@ -169,18 +169,18 @@ install_into "$home"
 result=$(run_doctor "$home")
 rc=$(printf '%s\n' "$result" | head -1)
 out=$(printf '%s\n' "$result" | tail -n +2)
-if [[ "$rc" == "0" ]] && grep -q "WARN" <<< "$out" && grep -q "claude-aliases.sh not referenced" <<< "$out"; then
+if [[ "$rc" == "0" ]] && grep -q "WARN" <<< "$out" && grep -q "vigil-aliases.sh not referenced" <<< "$out"; then
     pass "missing rc source produces WARN with exit 0"
 else
     fail "expected exit 0 with WARN about missing rc source (rc=$rc, out: $out)"
 fi
 
 # Now drop a sourcing line into ~/.bashrc and re-run; warning should clear.
-echo 'source ~/.config/vigil/claude-aliases.sh' > "$home/.bashrc"
+echo 'source ~/.config/vigil/vigil-aliases.sh' > "$home/.bashrc"
 result=$(run_doctor "$home")
 rc=$(printf '%s\n' "$result" | head -1)
 out=$(printf '%s\n' "$result" | tail -n +2)
-if [[ "$rc" == "0" ]] && grep -q "claude-aliases.sh referenced in" <<< "$out"; then
+if [[ "$rc" == "0" ]] && grep -q "vigil-aliases.sh referenced in" <<< "$out"; then
     pass "rc source line detected after add"
 else
     fail "expected PASS on rc source line (rc=$rc, out: $out)"

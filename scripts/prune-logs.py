@@ -6,7 +6,7 @@ Usage:
                   [--max-total-size SIZE] [--dry-run] [--quiet]
 
 Targets files matching session-YYYYMMDD-HHMMSS.{log,txt} — the scheme
-produced by claude-aliases.sh. Files outside that pattern are never
+produced by vigil-aliases.sh. Files outside that pattern are never
 touched, so pointing --log-dir at the wrong directory is safe.
 
 Defaults: --log-dir ~/vigil-logs, --older-than 90d. --max-total-size
@@ -45,7 +45,7 @@ def parse_size(s: str) -> int:
 
 def parse_stamp(stamp: str) -> float:
     # YYYYMMDD-HHMMSS — local time, matching the session-filename format
-    # produced by claude-aliases.sh via `date +%Y%m%d-%H%M%S`.
+    # produced by vigil-aliases.sh via `date +%Y%m%d-%H%M%S`.
     return time.mktime(time.strptime(stamp, '%Y%m%d-%H%M%S'))
 
 

@@ -13,7 +13,7 @@ set -uo pipefail
 shopt -s nullglob
 
 REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-ALIASES="$REPO_DIR/claude-aliases.sh"
+ALIASES="$REPO_DIR/vigil-aliases.sh"
 
 failed=0
 pass() { printf '  PASS  %s\n' "$1"; }

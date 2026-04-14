@@ -61,7 +61,7 @@ section "Update on never-installed home"
 home=$(mktmp)
 update_into "$home"
 check_present "settings.json"      "$home/.claude/settings.json"
-check_present "claude-aliases.sh"  "$home/.config/vigil/claude-aliases.sh"
+check_present "vigil-aliases.sh"  "$home/.config/vigil/vigil-aliases.sh"
 
 # -----------------------------------------------------------------------------
 section "Bundled files refresh on update (stale local edits lost)"

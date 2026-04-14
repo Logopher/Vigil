@@ -30,7 +30,7 @@ Copies Vigil into:
   $(display_path "$CLAUDE_DIR")/              (default profile — real directory)
 
 The installer refuses to run if any destination already exists,
-including $(display_path "$CLAUDE_DIR"), $(display_path "$DEST_DIR/claude-aliases.sh"),
+including $(display_path "$CLAUDE_DIR"), $(display_path "$DEST_DIR/vigil-aliases.sh"),
 any $(display_path "$DEST_DIR/policies")/*.json, or $(display_path "$DEST_DIR/profiles/default").
 
 There is no --force. If re-installing, remove these manually first.
@@ -59,7 +59,7 @@ check_path() {
 }
 
 check_path "$CLAUDE_DIR"
-check_path "$DEST_DIR/claude-aliases.sh"
+check_path "$DEST_DIR/vigil-aliases.sh"
 check_path "$DEST_DIR/doctor.sh"
 check_path "$DEST_DIR/profiles/default"
 check_path "$DEST_DIR/scripts"
@@ -94,7 +94,7 @@ fi
 
 mkdir -p "$DEST_DIR/policies" "$DEST_DIR/profiles" "$DEST_DIR/scripts" "$CLAUDE_DIR"
 
-cp "$REPO_DIR/claude-aliases.sh" "$DEST_DIR/claude-aliases.sh"
+cp "$REPO_DIR/vigil-aliases.sh" "$DEST_DIR/vigil-aliases.sh"
 cp "$REPO_DIR/doctor.sh" "$DEST_DIR/doctor.sh"
 chmod +x "$DEST_DIR/doctor.sh"
 
@@ -163,7 +163,7 @@ The default profile lives at $CLAUDE_DISPLAY. A convenience symlink
 at $DEST_DISPLAY/profiles/default points to it.
 
 If not already sourcing from your shell rc, add:
-  [ -f $DEST_DISPLAY/claude-aliases.sh ] && source $DEST_DISPLAY/claude-aliases.sh
+  [ -f $DEST_DISPLAY/vigil-aliases.sh ] && source $DEST_DISPLAY/vigil-aliases.sh
 
 To verify the install at any time:
   $DEST_DISPLAY/doctor.sh

@@ -37,6 +37,13 @@ run_script() {
     HOME="$home" python3 "$SCRIPT" "$settings" >/dev/null
 }
 
+# Like run_script, but cd into $cwd first so the script's os.getcwd()
+# resolves {{CWD}} against that directory.
+run_script_in() {
+    local cwd="$1" home="$2" settings="$3"
+    (cd "$cwd" && HOME="$home" python3 "$SCRIPT" "$settings" >/dev/null)
+}
+
 # Build a minimal settings.json without any denyRead/denyWrite keys.
 seed_empty_settings() {
     local path="$1"
@@ -290,6 +297,80 @@ if [[ "$first" == "$second" ]]; then
     pass "second run produced identical settings.json"
 else
     fail "expected idempotent rewrite"
+    diff <(printf '%s' "$first") <(printf '%s' "$second") >&2 || true
+fi
+
+# -----------------------------------------------------------------------------
+section "{{CWD}} placeholder: git repo adds .git/config and .git/hooks/"
+home=$(mktmp)
+repo=$(mktmp)
+settings="$home/settings.json"
+seed_empty_settings "$settings"
+(cd "$repo" && git init -q) || fail "git init failed in test setup"
+run_script_in "$repo" "$home" "$settings"
+denywrite=$(read_array "$settings" denyWrite)
+if grep -qx "$repo/.git/config" <<< "$denywrite"; then
+    pass "{{CWD}}/.git/config expanded and included in denyWrite"
+else
+    fail "expected $repo/.git/config in denyWrite (got: $denywrite)"
+fi
+if grep -qx "$repo/.git/hooks/" <<< "$denywrite"; then
+    pass "{{CWD}}/.git/hooks/ expanded and included in denyWrite"
+else
+    fail "expected $repo/.git/hooks/ in denyWrite (got: $denywrite)"
+fi
+
+# -----------------------------------------------------------------------------
+section "{{CWD}} placeholder: non-repo CWD drops git entries with diagnostic"
+home=$(mktmp)
+nonrepo=$(mktmp)
+settings="$home/settings.json"
+seed_empty_settings "$settings"
+rc=0
+out=$(cd "$nonrepo" && HOME="$home" python3 "$SCRIPT" "$settings" 2>&1) || rc=$?
+denywrite=$(read_array "$settings" denyWrite)
+if grep -q "$nonrepo/.git" <<< "$denywrite"; then
+    fail "non-repo CWD must not produce .git entries (got: $denywrite)"
+else
+    pass "non-repo CWD produced no .git entries in denyWrite"
+fi
+if grep -q "dropped denyWrite: $nonrepo/.git/config" <<< "$out"; then
+    pass "diagnostic names dropped {{CWD}}/.git/config entry"
+else
+    fail "expected dropped-entry diagnostic for .git/config (got: $out)"
+fi
+
+# -----------------------------------------------------------------------------
+section "~/.gitconfig: real file is included in denyWrite"
+home=$(mktmp)
+repo=$(mktmp)
+settings="$home/settings.json"
+seed_empty_settings "$settings"
+: > "$home/.gitconfig"
+(cd "$repo" && git init -q)
+run_script_in "$repo" "$home" "$settings"
+denywrite=$(read_array "$settings" denyWrite)
+if grep -qx "$home/.gitconfig" <<< "$denywrite"; then
+    pass "~/.gitconfig included in denyWrite when the file exists"
+else
+    fail "expected $home/.gitconfig in denyWrite (got: $denywrite)"
+fi
+
+# -----------------------------------------------------------------------------
+section "Idempotent under {{CWD}}: two runs from the same repo match"
+home=$(mktmp)
+repo=$(mktmp)
+settings="$home/settings.json"
+seed_empty_settings "$settings"
+(cd "$repo" && git init -q)
+run_script_in "$repo" "$home" "$settings"
+first=$(cat "$settings")
+run_script_in "$repo" "$home" "$settings"
+second=$(cat "$settings")
+if [[ "$first" == "$second" ]]; then
+    pass "repeat run from same CWD produced identical settings.json"
+else
+    fail "expected idempotent rewrite under {{CWD}}"
     diff <(printf '%s' "$first") <(printf '%s' "$second") >&2 || true
 fi
 

@@ -43,9 +43,19 @@ import os
 import sys
 from pathlib import Path
 
-# Master lists. "~" is expanded at run time. Entries ending in "/" must
-# resolve to a real directory; entries without a trailing slash must
-# resolve to a real file. Symlinks are always rejected.
+# Master lists. "~" and "{{CWD}}" are expanded at run time. "~" resolves
+# to $HOME via os.path.expanduser; "{{CWD}}" resolves to os.getcwd() at
+# filter invocation, which — because the filter runs inside the vigil
+# subshell before exec'ing claude — is the directory the operator
+# launched vigil from. Entries ending in "/" must resolve to a real
+# directory; entries without a trailing slash must resolve to a real
+# file. Symlinks are always rejected.
+#
+# {{CWD}} entries protect the active repo's git metadata against
+# subprocess tampering. If the operator launches vigil from a non-repo
+# directory those entries fail the type check and drop out with a
+# visible diagnostic; a subsequent mid-session `cd` into a repo will
+# not retroactively protect it — launch vigil from inside the repo.
 MASTER_DENY_READ = (
     "~/.ssh/",
     "~/.aws/",
@@ -64,6 +74,9 @@ MASTER_DENY_WRITE = (
     "~/.local/bin/",
     "~/.local/lib/",
     "~/bin/",
+    "~/.gitconfig",
+    "{{CWD}}/.git/config",
+    "{{CWD}}/.git/hooks/",
 )
 
 
@@ -85,14 +98,15 @@ def evaluate(entry: str) -> tuple[bool, str]:
 def build(master: tuple[str, ...]) -> tuple[list[str], list[tuple[str, str]]]:
     """Expand each master entry and partition into (kept, dropped).
 
-    Kept entries preserve the original master-list spelling (with "~")
-    so the JSON stays portable across users. Dropped entries are
-    returned with their expanded path for the diagnostic output.
+    Kept entries are written back as absolute paths; "~" is expanded
+    to $HOME and "{{CWD}}" is expanded to os.getcwd(). Dropped entries
+    are returned with their expanded path for the diagnostic output.
     """
+    cwd = os.getcwd()
     kept: list[str] = []
     dropped: list[tuple[str, str]] = []
     for entry in master:
-        expanded = os.path.expanduser(entry)
+        expanded = os.path.expanduser(entry).replace("{{CWD}}", cwd)
         keep, reason = evaluate(expanded)
         if keep:
             kept.append(expanded)

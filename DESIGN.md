@@ -105,10 +105,12 @@ Hook references in `settings.json` (e.g., `command: {{PROFILE_DIR}}/hooks/prune-
 
 ## Session wrappers
 
-`claude-aliases.sh` defines two shell functions, both using `script(1)` to log the session:
+`claude-aliases.sh` defines four shell functions, all using `script(1)` to log the session:
 
 - **`claude`** — standard session under the active profile (default). No policy applied.
+- **`claude-strict`** — session with the `strict` policy explicitly applied. Behaviorally equivalent to the default profile baseline; useful when tooling expects an explicit policy selection rather than relying on the profile default.
 - **`claude-dev`** — session with the `dev` policy and the working directory pinned to the current git repository's root. The `cd` runs in a subshell so the caller's working directory is not disturbed. If the current directory is not inside a git repo, `claude-dev` falls back to the current directory.
+- **`claude-yolo`** — session with the `yolo` policy applied. Bypasses confirmations; retains `rm` and `sudo` denies.
 
 `claude-dev` exists because `dev` alone does not scope a session to the project (see [Policy does not enforce filesystem scope](#policy-does-not-enforce-filesystem-scope)). Combining the `dev` policy with a project-root working directory gives the sandbox a scope to enforce, producing a permissive-but-contained session in one command.
 

@@ -68,7 +68,7 @@ Always-on protections for `.git/` (non-claude subfolders), `.gitconfig`, shell R
 
 ### Env-scrub layer (claude-aliases.sh wrappers)
 
-The shell wrappers (`claude`, `claude-dev`) launch Claude in a subshell whose environment has been reduced to a curated allowlist (PATH, HOME, locale, SSH agent socket, GPG, XDG, editor, display, `CLAUDE_*`, plus `LC_*` and `GIT_*` by prefix). Credential vars (`AWS_*`, `GITHUB_*`, `ANTHROPIC_API_KEY`, `NPM_TOKEN`, `*_SECRET`, `*_PASSWORD`, …) are unset before Claude inherits them. **Catches:** environment-variable interpolation as an exfiltration channel for credentials sourced from the operator's shell. **Does not catch:** secrets read from disk by allowed paths, secrets in shell history, or the case where an operator launches `claude` directly without the wrapper.
+The shell wrappers (`claude`, `claude-strict`, `claude-dev`, `claude-yolo`) launch Claude in a subshell whose environment has been reduced to a curated allowlist (PATH, HOME, locale, SSH agent socket, GPG, XDG, editor, display, `CLAUDE_*`, plus `LC_*` and `GIT_*` by prefix). Credential vars (`AWS_*`, `GITHUB_*`, `ANTHROPIC_API_KEY`, `NPM_TOKEN`, `*_SECRET`, `*_PASSWORD`, …) are unset before Claude inherits them. **Catches:** environment-variable interpolation as an exfiltration channel for credentials sourced from the operator's shell. **Does not catch:** secrets read from disk by allowed paths, secrets in shell history, or the case where an operator launches `claude` directly without the wrapper.
 
 The allowlist is extensible from the operator's own `~/.bashrc`:
 

@@ -11,6 +11,19 @@ Platform support for claude-config. "Tested" means the author has verified insta
 | Windows (Git Bash / MSYS2) | Untested | `prune-worktrees.sh` contains explicit handling for MSYS2 path translation (basename-only matching to survive `C:/…` vs `/c/…` mismatch). Installer and the rest have not been exercised here. Symlink behavior on MSYS2 is historically unreliable. |
 | Windows native (PowerShell / cmd.exe) | Not supported | Install script is bash-only. Use WSL2 instead. |
 
+## Launch context
+
+Platform support describes the OS and shell surface this tool targets. Launch context describes how Claude Code itself is invoked within that surface:
+
+| Launch context | Coverage | Notes |
+|---|---|---|
+| Terminal via session wrappers (`claude`, `claude-dev`, `claude-strict`, `claude-yolo`) | Full | Profile, session logging, environment scrub, per-session policy selection. Recommended path on every supported platform. |
+| Terminal via bare `claude` | Profile only | Default profile applies; no session logging, no environment scrub, no policy overlay. |
+| VS Code Claude Code extension | Profile only | Reads `~/.claude/settings.json` at session start. Does not route through the bash wrappers. |
+| Claude Code desktop app | Profile only | Same as the VS Code extension. |
+
+The discriminator between full coverage and profile-only is the bash wrappers, not the OS. Desktop-app users on macOS and Linux receive equivalent (partial) coverage; terminal users on macOS and Linux receive equivalent (full) coverage.
+
 ## Platform-specific code
 
 All platform branches in the codebase:

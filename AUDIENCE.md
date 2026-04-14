@@ -31,11 +31,11 @@ Not "below the floor" — these are users for whom the tool currently doesn't fi
 
 - **Users without terminal proficiency.** No way around this; the tool is text-and-config.
 - **Users on native Windows without WSL.** The installer is bash-only. Could change with a PowerShell port or a WSL-required notice; today it's a hard limit.
-- **Users who don't know what `~/.claude/settings.json` is.** Whether they reach Claude through the desktop app, an IDE extension, or the CLI is irrelevant — the tool's value depends on understanding *what configuration is* and being willing to manage it. A user who only consumes Claude through a polished UI may never need or notice this tool.
+- **Users who don't know what `~/.claude/settings.json` is.** The tool's value depends on understanding *what configuration is* and being willing to manage it. A user who only consumes Claude through a polished UI may never need or notice this tool.
 
 ### Common misconceptions about who the tool is *not* for
 
-- **"macOS desktop app users."** Wrong: the desktop app uses the same Claude Code engine and reads the same `settings.json`. Our config applies to it. The relevant question is the bullet above — does the user know what `settings.json` is — not which surface they launch Claude from.
+- **"macOS desktop app users."** Partially in scope, for reasons that have nothing to do with macOS. The desktop app reads `~/.claude/settings.json`, so the profile baseline (deny list, hooks, sandbox) applies regardless of OS or launch surface. The posture layer — session wrappers, policy selection, session logging — activates only from an interactive terminal, so desktop-app users (on any OS) don't get it. macOS bash users get the same posture layer Linux and WSL2 bash users get; the discriminator is terminal vs. desktop app, not macOS vs. other platforms.
 - **"People new to Claude Code."** Wrong: a safe baseline benefits new users *more*, not less. The earlier framing conflated familiarity with competence. The actual prerequisite is "knows what an autonomous agent can do," which doesn't require any specific Claude Code mileage.
 
 ## Self-use vs. friend-deploy

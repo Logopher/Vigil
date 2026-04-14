@@ -10,6 +10,8 @@ A configuration that implies protection without delivering it is worse than no c
 
 This document concerns the default profile, the three shipped policies (`strict`, `dev`, `yolo`), and the `claude-dev` wrapper. It does not cover custom profiles or policies users write themselves, nor does it cover Claude Code itself beyond the surfaces this tool configures.
 
+The scope also assumes Claude Code is launched through the session wrappers in `claude-aliases.sh`. Launches via the VS Code extension or the Claude Code desktop app receive the default profile's deny list, hooks, and sandbox configuration, but do not receive session logging, the environment scrub, or per-session policy selection. Mitigations that depend on the posture layer — the audit trail and the env-scrub layer described below — do not apply to desktop-app or extension launches.
+
 ## Adversaries
 
 Four adversary models in increasing order of threat. The tool's protections vary across them.

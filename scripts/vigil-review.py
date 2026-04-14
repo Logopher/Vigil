@@ -37,9 +37,17 @@ ANSI_2BYTE = re.compile(r'\x1b[\(\)*+#@=>][a-zA-Z0-9]?')
 ANSI_SHORT = re.compile(r'\x1b[78cDEHMNOZ\\]')
 # C1 controls: some terminals interpret these as 7-bit ESC-equivalents.
 C1_CONTROLS = re.compile(r'[\u0080-\u009f]')
-# Trojan-source attack primitives.
-BIDI_MARKS = re.compile(r'[\u202a-\u202e\u2066-\u2069\u061c\u180e]')
-ZERO_WIDTH = re.compile(r'[\u200b-\u200d\ufeff\u2060]')
+# Trojan-source attack primitives. Includes the LRM/RLM weak directional
+# marks alongside the stronger override/embed/isolate codepoints — both are
+# documented bidi-confusion vectors against diff review.
+BIDI_MARKS = re.compile(r'[\u200e\u200f\u202a-\u202e\u2066-\u2069\u061c\u180e]')
+# Zero-width and otherwise-invisible Unicode that hides content in plain
+# sight: width zero, soft hyphen, combining grapheme joiner, invisible
+# math operators, variation selectors, Hangul fillers.
+ZERO_WIDTH = re.compile(
+    r'[\u200b-\u200d\u00ad\u034f\u2060-\u2064\ufeff'
+    r'\ufe00-\ufe0f\u3164\uffa0]'
+)
 # Residual C0 controls (excludes tab and newline, which are preserved).
 C0_CONTROLS = re.compile(r'[\x00-\x08\x0b-\x1f]')
 
@@ -93,22 +101,45 @@ def _git_env() -> "dict[str, str]":
     env['GIT_CONFIG_SYSTEM'] = '/dev/null'
     env['GIT_PAGER'] = 'cat'
     env['PAGER'] = 'cat'
+    # Defang per-repo external commands: textconv/diff drivers and
+    # external-diff hooks can execute arbitrary binaries from a malicious
+    # .git/config. Drop them; the show output stays raw.
+    env.pop('GIT_EXTERNAL_DIFF', None)
+    env.pop('GIT_TEXTCONV', None)
     return env
 
 
+# Override knobs the per-repo .git/config could otherwise turn into code
+# execution against this process.
+_GIT_HARDEN = (
+    '-c', 'core.attributesFile=/dev/null',
+    '-c', 'core.hooksPath=/dev/null',
+    '-c', 'diff.external=',
+    '-c', 'diff.textconv=',
+)
+
+
 def _git(args, cwd=None, input_text=None):
+    # Subprocess output is decoded with errors='replace' so a commit
+    # containing non-UTF-8 bytes (raw filename bytes, mojibake author
+    # names) cannot crash the viewer before sanitization runs — the whole
+    # paranoid-rendering posture depends on always reaching sanitize().
     return subprocess.run(
-        ['git', *args],
+        ['git', *_GIT_HARDEN, *args],
         cwd=cwd,
         input=input_text,
         capture_output=True,
         text=True,
+        encoding='utf-8',
+        errors='replace',
         env=_git_env(),
     )
 
 
 def rev_list(range_expr: str, cwd: str):
-    r = _git(['rev-list', '--reverse', range_expr], cwd=cwd)
+    # `--` ensures the range is parsed as a revision selector and never as
+    # a flag, even if the user passes something starting with `-`.
+    r = _git(['rev-list', '--reverse', range_expr, '--'], cwd=cwd)
     if r.returncode != 0:
         return None, r.stderr.strip()
     return [s for s in r.stdout.splitlines() if s], None
@@ -131,6 +162,13 @@ def commit_diff(sha: str, cwd: str) -> str:
     return r.stdout
 
 
+# Session IDs are minted by vigil-aliases.sh as `date +%Y%m%d-%H%M%S`.
+# Validating the trailer value against this shape stops a hostile commit
+# from spoofing a path, embedding traversal, or planting misleading text
+# in the rendered output via an attacker-controlled trailer.
+_SESSION_ID_RE = re.compile(r'^[0-9]{8}-[0-9]{6}$')
+
+
 def vigil_session_id(sha: str, cwd: str):
     body = _git(['log', '-1', '--format=%B', sha], cwd=cwd)
     if body.returncode != 0:
@@ -145,6 +183,8 @@ def vigil_session_id(sha: str, cwd: str):
 
 
 def transcript_note(session_id: str) -> str:
+    if not _SESSION_ID_RE.match(session_id):
+        return f'Transcript: invalid Vigil-Session id (rejected)'
     log_dir = os.environ.get('VIGIL_LOG_DIR') or os.path.expanduser('~/vigil-logs')
     path = Path(log_dir) / f'session-{session_id}.txt'
     if path.is_file():
@@ -162,14 +202,26 @@ def self_check():
     if sys.version_info < (3, 8):
         problems.append(f'python3 too old: {sys.version_info[0]}.{sys.version_info[1]}')
     try:
-        st = Path(__file__).resolve().stat()
+        script_path = Path(__file__).resolve()
+        st = script_path.stat()
+        parent_st = script_path.parent.stat()
     except OSError as e:
         problems.append(f'cannot stat script: {e}')
     else:
+        # Script integrity: anything that lets a non-owner mutate the file
+        # or swap it atomically (parent-dir writability) breaks the gate.
         if st.st_uid != os.getuid():
             problems.append('script not owned by current user')
         if st.st_mode & stat.S_IWOTH:
             problems.append('script is world-writable')
+        if st.st_mode & stat.S_IWGRP:
+            problems.append('script is group-writable')
+        if parent_st.st_uid != os.getuid():
+            problems.append('script parent dir not owned by current user')
+        if parent_st.st_mode & stat.S_IWOTH:
+            problems.append('script parent dir is world-writable')
+        if parent_st.st_mode & stat.S_IWGRP:
+            problems.append('script parent dir is group-writable')
     return problems
 
 
@@ -177,12 +229,20 @@ def _prompt_line(prompt: str) -> str:
     sys.stderr.write(prompt)
     sys.stderr.flush()
     # Prefer /dev/tty so the prompt works when stdin is occupied (e.g., the
-    # pre-push hook feeds ref data on stdin). Fall back to stdin for
-    # detached/test sessions where /dev/tty is unavailable.
+    # pre-push hook feeds ref data on stdin). Fall back to stdin only when
+    # stdin is itself a terminal — a non-TTY stdin in this branch almost
+    # always means we'd silently consume hook protocol data as the user's
+    # answer, which is worse than failing loudly.
     try:
         with open('/dev/tty', 'r') as tty:
             return tty.readline()
     except OSError:
+        if not sys.stdin.isatty():
+            sys.stderr.write(
+                '\nvigil-review: no /dev/tty and stdin is not a terminal; '
+                'cannot prompt safely.\n'
+            )
+            return ''
         return sys.stdin.readline()
 
 

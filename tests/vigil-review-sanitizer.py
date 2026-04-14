@@ -42,21 +42,28 @@ def check(name: str, cond: bool, detail: str = '') -> None:
 
 # Adversarial corpus: each entry is a known terminal-attack primitive.
 CORPUS = {
-    'ansi-clear-screen':  '\x1b[2J\x1b[Hgotcha',
-    'ansi-sgr-red':       '\x1b[31mred\x1b[0m',
-    'ansi-cursor-move':   '\x1b[10;20Hhidden',
-    'osc-set-title':      '\x1b]0;pwned\x07normal',
-    'dcs-sequence':       '\x1bP1;2|data\x1b\\after',
-    'c1-csi-introducer':  '\x9b31mred',
-    'bidi-trojan':        'access != "user\u202e \u2066# admin\u2069 \u2066":\n',
-    'zero-width':         'ad\u200bmin',
-    'bell':               'alert\x07\x07',
-    'form-feed':          'page\x0cbreak',
-    'vertical-tab':       'va\x0bb',
-    'overlong-line':      'x' * 1300,
-    'null-byte':          'before\x00after',
-    'raw-esc':            'pre\x1bpost',
-    'carriage-return':    'overwrite\rline',
+    'ansi-clear-screen':   '\x1b[2J\x1b[Hgotcha',
+    'ansi-sgr-red':        '\x1b[31mred\x1b[0m',
+    'ansi-cursor-move':    '\x1b[10;20Hhidden',
+    'ansi-short-reset':    'pre\x1bcafter',  # ESC c = full terminal reset
+    'ansi-short-savecur':  'pre\x1b7after',  # ESC 7 = save cursor
+    'ansi-charset-select': 'pre\x1b(Bafter', # ESC ( B = G0 charset select
+    'osc-set-title':       '\x1b]0;pwned\x07normal',
+    'osc-unterminated':    '\x1b]0;dangling-then-eof',
+    'dcs-sequence':        '\x1bP1;2|data\x1b\\after',
+    'c1-csi-introducer':   '\x9b31mred',
+    'bidi-trojan':         'access != "user\u202e \u2066# admin\u2069 \u2066":\n',
+    'lrm-rlm-marks':       'a\u200eb\u200fc',
+    'zero-width':          'ad\u200bmin',
+    'soft-hyphen':         'ad\u00admin',
+    'variation-selector':  'a\ufe0fb',
+    'bell':                'alert\x07\x07',
+    'form-feed':           'page\x0cbreak',
+    'vertical-tab':        'va\x0bb',
+    'overlong-line':       'x' * 1300,
+    'null-byte':           'before\x00after',
+    'raw-esc':             'pre\x1bpost',
+    'carriage-return':     'overwrite\rline',
 }
 
 
@@ -155,6 +162,22 @@ for name, raw in CORPUS.items():
 section('Wrapped lines are stable on re-sanitize')
 edge = 'y' * (MAX_LINE - 1) + WRAP_MARK
 check('exact MAX_LINE-length wrapped line unchanged', sanitize(edge) == edge)
+
+
+# Lines stuffed with NULs (4-char visible markers post-escape) must still
+# wrap correctly: the wrap stage runs after C0 expansion and accounts for
+# the post-escape length.
+section('C0 escape + line wrap interact correctly')
+nul_burst = '\x00' * 200  # expands to 200 × '⎡00⎤' = 800 visible chars
+out = sanitize(nul_burst)
+check('no C0 byte survives', '\x00' not in out)
+check('output contains C0 escape marker', '\u23a100\u23a4' in out)
+for line in out.split('\n'):
+    check(
+        f'wrapped line ≤ {MAX_LINE} chars',
+        len(line) <= MAX_LINE,
+        f'(line len={len(line)})',
+    )
 
 
 sys.exit(1 if failed else 0)

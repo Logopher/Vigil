@@ -4,7 +4,7 @@ Running list of known issues and proposed work, organized by triage disposition.
 
 For project stage and what's blocking each transition, see `LIFECYCLE.md`. For verified vs. unverified protection claims, see `THREAT_MODEL.md`.
 
-**Last triaged:** 2026-04-13 (session closed the path-representation gap via canonical-form enforcement in `check_path_representation`; partially closed the allow/deny glob-overlap gap via `check_allow_deny_dead_rules`; removed the stale `filter-sandbox-denies.py` "one-way" bullet — the script is authoritative and reactive, as its docstring and reactive tests confirm).
+**Last triaged:** 2026-04-14 (added hook-based session-scope validation for memory writes as a next-session candidate, deferring the cross-project memory-pollution concern behind the higher-priority memory-policy decision).
 
 ## Documented gaps — do not action
 
@@ -25,6 +25,7 @@ Each item is substantial enough to deserve its own session. Pick one, plan it, s
 
 - **Active-policy banner at session start.** A second `SessionStart` hook that prints which policy is active, so the operator doesn't have to remember whether they're in `dev` or `yolo`. The hook can't read shell-exported vars (the harness scrubs hook env — see project memory), so the design has to derive the policy from `settings.json` path inspection or a dropped marker file. Plan first.
 - **`git pre-push` hook tooling + `claude-init-repo` helper.** A hook that requires interactive confirmation before any push, plus a helper that installs the hook into a target repo. Directly addresses the commit-poisoning gap. Larger than a typical "easy" feature.
+- **Hook-based session-scope validation for memory writes.** If any profile allows `Write(~/.claude/projects/*/memory/**)`, cross-project memory poisoning is reachable via the in-process Write tool (sandbox doesn't cover in-process tools; Claude Code's matcher has no `$PROJECT_SLUG` substitution, so the permission layer can't scope a write to the calling session's project). A `PreToolUse` hook that resolves the calling session's project slug and rejects memory-path writes to other slugs closes the gap. Secondary priority — same-project memory writes are the primary persistence surface — but cross-project poisoning is specifically harder to notice, since poison in a rarely-visited project ages silently until discovery. Design should coordinate with the memory-policy decision (deny-by-default in default/strict profile vs. allow in a separate `recall` profile); the hook most naturally lives in whichever profile enables memory writes, not in the default profile's hook set.
 
 ## Stage 2 — needs versioning / wider design
 

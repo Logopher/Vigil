@@ -1,6 +1,6 @@
 # DESIGN.md
 
-This document explains the design choices behind claude-config: what it is for, how it is structured, and why. For installation see `README.md`; for platform support see `COMPATIBILITY.md`; for the project's lifecycle stage see `LIFECYCLE.md`; for what the tool does and does not defend against see `THREAT_MODEL.md`.
+This document explains the design choices behind Vigil: what it is for, how it is structured, and why. For installation see `README.md`; for platform support see `COMPATIBILITY.md`; for the project's lifecycle stage see `LIFECYCLE.md`; for what the tool does and does not defend against see `THREAT_MODEL.md`.
 
 ## What this project is
 
@@ -8,7 +8,7 @@ A configuration baseline and deployment mechanism for Claude Code sessions. It s
 
 1. A default profile that is safe by construction — plan mode, a hard deny list covering destructive shell patterns, session-logging hooks, and baseline agent definitions.
 2. A small set of permission policies (`strict`, `dev`, `yolo`) that can be selected per session to change how interruptive Claude's permission gates are.
-3. An installer that copies the repo's profiles, policies, hooks, and shell aliases into `~/.config/claude-config/` and `~/.claude/`.
+3. An installer that copies the repo's profiles, policies, hooks, and shell aliases into `~/.config/vigil/` and `~/.claude/`.
 
 ## Problem being solved
 
@@ -18,7 +18,7 @@ Claude Code's out-of-box defaults prompt once per tool and then remember the ans
 
 **Safe by default.** The default profile is strict. A user who installs this tool and does nothing else gets plan mode and a deny list covering `rm`, `sudo`, destructive git, network fetchers, and language runtimes. Loosening is an explicit per-session act, never implicit.
 
-**Copy over symlink.** The installer copies repo content into `~/.config/claude-config/`. Edits to the source repo — including edits Claude itself makes — do not affect running sessions until the developer re-runs the installer. The copy step is a review checkpoint.
+**Copy over symlink.** The installer copies repo content into `~/.config/vigil/`. Edits to the source repo — including edits Claude itself makes — do not affect running sessions until the developer re-runs the installer. The copy step is a review checkpoint.
 
 The copy firewall depends on a second rule: Claude never runs `install.sh`. An agent that could modify source and then trigger installation would collapse the review gate. This rule appears in every project's `CLAUDE.md` and is the reason the installer has no automation hook.
 
@@ -53,11 +53,11 @@ Three policies ship:
 
 ### Why strict is default
 
-The secure posture should be the default and the easy path. Elevation — switching to `dev` or `yolo` — is a deliberate per-session choice, the way `sudo` is a deliberate per-command choice. A user who hits a permission block reconsiders whether the action is one they actually wanted; that pause is the feature, not the friction. If elevation is frequent for a given workflow, invoking `claude-dev` (or `claude --settings …`) for that session restores the flow. The inverse — permissive by default, tighten when something goes wrong — means discovering the posture mismatch after damage is already done.
+The secure posture should be the default and the easy path. Elevation — switching to `dev` or `yolo` — is a deliberate per-session choice, the way `sudo` is a deliberate per-command choice. A user who hits a permission block reconsiders whether the action is one they actually wanted; that pause is the feature, not the friction. If elevation is frequent for a given workflow, invoking `vigil-dev` (or `claude --settings …`) for that session restores the flow. The inverse — permissive by default, tighten when something goes wrong — means discovering the posture mismatch after damage is already done.
 
 ### When to reach for each policy
 
-- **Routine code writing in a trusted repo:** `claude-dev`. Runs the `dev` policy with the working directory pinned to the git repository root (see [Session wrappers](#session-wrappers)).
+- **Routine code writing in a trusted repo:** `vigil-dev`. Runs the `dev` policy with the working directory pinned to the git repository root (see [Session wrappers](#session-wrappers)).
 - **Exploratory work in an unfamiliar repo:** default profile (no `--settings`). Plan mode forces deliberate review of every action before it runs.
 - **Tight iteration where every prompt is friction:** `yolo`. `rm` and `sudo` still deny; everything else flows.
 - **Scripted or automated invocation where determinism matters:** `strict` as an explicit selection. Same behavior as default, but the invocation makes the policy choice visible rather than inherited.
@@ -71,7 +71,7 @@ Scope enforcement comes from two other layers:
 - **The sandbox**, configured in the profile. When enabled with `allowUnsandboxedCommands: false`, writes are confined to the session's working directory and `$TMPDIR`. The default profile also configures `sandbox.filesystem.denyRead` for common credential paths and `sandbox.network.allowedDomains: []` to block outbound network — process-level enforcement that cannot be bypassed by spawning a subshell.
 - **Claude Code's built-in protections** for `.git`, sensitive `.claude/` files, shell RC files, and `.mcp.json` — always on regardless of policy.
 
-This means `dev` by itself does not scope a session to the project. `dev` plus the default profile's sandbox plus being launched from the project root does. The `claude-dev` wrapper combines those three ingredients in one command.
+This means `dev` by itself does not scope a session to the project. `dev` plus the default profile's sandbox plus being launched from the project root does. The `vigil-dev` wrapper combines those three ingredients in one command.
 
 The sandbox is also the layer that addresses sophisticated attacks at the subprocess level. Permission-string matching catches `curl attacker.example.com` but not `echo 'base64' | base64 -d | sh`; the sandbox catches both, because the decoded subprocess inherits the sandbox's network and filesystem denies. The sandbox does *not* cover Claude Code's own in-process tools (Read, Write, Edit) — those run inside the host process and are governed only by the permission layer. See `THREAT_MODEL.md` for the full enumeration.
 
@@ -79,19 +79,19 @@ The sandbox is also the layer that addresses sophisticated attacks at the subpro
 
 `install.sh` performs these steps:
 
-1. Check every destination for existing content. If any of `~/.claude`, `~/.config/claude-config/claude-aliases.sh`, `~/.config/claude-config/policies/<name>.json`, `~/.config/claude-config/profiles/default`, or `~/.config/claude-config/scripts` already exists, the installer prints the conflicting paths to stderr and exits non-zero. There is no `--force` flag.
-2. Copy `claude-aliases.sh` to `~/.config/claude-config/claude-aliases.sh`.
-3. For each policy file, substitute `{{HOME}}` with the user's home directory and write to `~/.config/claude-config/policies/<name>.json`. Non-template policy files (`yolo.json`) are copied verbatim.
-4. Copy management scripts to `~/.config/claude-config/scripts/` and make them executable.
+1. Check every destination for existing content. If any of `~/.claude`, `~/.config/vigil/vigil-aliases.sh`, `~/.config/vigil/policies/<name>.json`, `~/.config/vigil/profiles/default`, or `~/.config/vigil/scripts` already exists, the installer prints the conflicting paths to stderr and exits non-zero. There is no `--force` flag.
+2. Copy `vigil-aliases.sh` to `~/.config/vigil/vigil-aliases.sh`.
+3. For each policy file, substitute `{{HOME}}` with the user's home directory and write to `~/.config/vigil/policies/<name>.json`. Non-template policy files (`yolo.json`) are copied verbatim.
+4. Copy management scripts to `~/.config/vigil/scripts/` and make them executable.
 5. Copy the default profile directly into `~/.claude/`. Substitute `{{PROFILE_DIR}}` with `$HOME/.claude` and `{{HOME}}` with the user's home directory when processing `settings.template.json`.
 6. Ensure hook scripts are executable.
 7. Run `scripts/filter-sandbox-denies.py` against the generated `~/.claude/settings.json` to drop any `sandbox.filesystem.denyRead` entry that is a symlink, missing, or the wrong type. Bubblewrap fails closed if any denyRead entry cannot be mounted over; this filter prevents a confusing "every Bash subprocess fails" failure mode.
-8. Create a convenience symlink at `~/.config/claude-config/profiles/default` pointing to `~/.claude`, so the multi-profile layout convention holds for docs and any future additional profiles.
-9. Print a reminder to source `claude-aliases.sh` from the user's shell rc.
+8. Create a convenience symlink at `~/.config/vigil/profiles/default` pointing to `~/.claude`, so the multi-profile layout convention holds for docs and any future additional profiles.
+9. Print a reminder to source `vigil-aliases.sh` from the user's shell rc.
 
 The installer is deliberately simple: check, copy, substitute, filter, symlink. No dependency installation, no service registration, no shell-rc editing. Every path it touches is owned by the user; no `sudo` is required.
 
-The session wrappers in `claude-aliases.sh` re-run `filter-sandbox-denies.py` on every launch, so a system change between sessions (a credential path becoming a symlink, a directory replaced by a file, or a path disappearing) cannot silently degrade the sandbox into "fails closed for every subprocess." The filter is silent on success and tolerant of missing dependencies (`python3` absent or the script not yet installed).
+The session wrappers in `vigil-aliases.sh` re-run `filter-sandbox-denies.py` on every launch, so a system change between sessions (a credential path becoming a symlink, a directory replaced by a file, or a path disappearing) cannot silently degrade the sandbox into "fails closed for every subprocess." The filter is silent on success and tolerant of missing dependencies (`python3` absent or the script not yet installed).
 
 ### Why refuse rather than overwrite
 
@@ -101,18 +101,18 @@ The installer declines to distinguish "files we own" from "Claude Code's runtime
 
 ### Why `{{PROFILE_DIR}}` resolves to `~/.claude`
 
-Hook references in `settings.json` (e.g., `command: {{PROFILE_DIR}}/hooks/prune-worktrees.sh`) are substituted to `$HOME/.claude/hooks/prune-worktrees.sh` — the canonical, real path — rather than to the convenience symlink at `~/.config/claude-config/profiles/default`. Hook execution never resolves through a symlink, which avoids a class of sandbox-interaction bugs and keeps the runtime path identity-stable if the symlink is later changed or removed.
+Hook references in `settings.json` (e.g., `command: {{PROFILE_DIR}}/hooks/prune-worktrees.sh`) are substituted to `$HOME/.claude/hooks/prune-worktrees.sh` — the canonical, real path — rather than to the convenience symlink at `~/.config/vigil/profiles/default`. Hook execution never resolves through a symlink, which avoids a class of sandbox-interaction bugs and keeps the runtime path identity-stable if the symlink is later changed or removed.
 
 ## Session wrappers
 
-`claude-aliases.sh` defines four shell functions, all using `script(1)` to log the session:
+`vigil-aliases.sh` defines four shell functions, all using `script(1)` to log the session. The bare `claude` command is no longer wrapped — it falls through to the upstream Claude Code binary unchanged, preserving a name for invocations that should escape Vigil's session logging and env scrubbing.
 
-- **`claude`** — standard session under the active profile (default). No policy applied.
-- **`claude-strict`** — session with the `strict` policy explicitly applied. Behaviorally equivalent to the default profile baseline; useful when tooling expects an explicit policy selection rather than relying on the profile default.
-- **`claude-dev`** — session with the `dev` policy and the working directory pinned to the current git repository's root. The `cd` runs in a subshell so the caller's working directory is not disturbed. If the current directory is not inside a git repo, `claude-dev` falls back to the current directory.
-- **`claude-yolo`** — session with the `yolo` policy applied. Bypasses confirmations; retains `rm` and `sudo` denies.
+- **`vigil`** — standard session under the active profile (default). No policy applied.
+- **`vigil-strict`** — session with the `strict` policy explicitly applied. Behaviorally equivalent to the default profile baseline; useful when tooling expects an explicit policy selection rather than relying on the profile default.
+- **`vigil-dev`** — session with the `dev` policy and the working directory pinned to the current git repository's root. The `cd` runs in a subshell so the caller's working directory is not disturbed. If the current directory is not inside a git repo, `vigil-dev` falls back to the current directory.
+- **`vigil-yolo`** — session with the `yolo` policy applied. Bypasses confirmations; retains `rm` and `sudo` denies.
 
-`claude-dev` exists because `dev` alone does not scope a session to the project (see [Policy does not enforce filesystem scope](#policy-does-not-enforce-filesystem-scope)). Combining the `dev` policy with a project-root working directory gives the sandbox a scope to enforce, producing a permissive-but-contained session in one command.
+`vigil-dev` exists because `dev` alone does not scope a session to the project (see [Policy does not enforce filesystem scope](#policy-does-not-enforce-filesystem-scope)). Combining the `dev` policy with a project-root working directory gives the sandbox a scope to enforce, producing a permissive-but-contained session in one command.
 
 ## Session logging
 
@@ -124,7 +124,7 @@ The goal is *user-owned, readable conversation history*. Anything else (debuggin
 
 ### How it works
 
-Both session wrappers pipe Claude through `script(1)`, which captures every byte the TUI writes to `~/claude-logs/session-<timestamp>.log`. The wrapper branches on `uname` for platform-correct `script(1)` flags (BSD and util-linux differ).
+Both session wrappers pipe Claude through `script(1)`, which captures every byte the TUI writes to `~/vigil-logs/session-<timestamp>.log`. The wrapper branches on `uname` for platform-correct `script(1)` flags (BSD and util-linux differ).
 
 The raw `.log` is faithful to the terminal — `cat` it in a real TTY and the session re-renders, escape codes and all — but it is not readable as a transcript. Every cursor move and color change is in the byte stream.
 

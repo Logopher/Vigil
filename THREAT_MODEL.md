@@ -8,9 +8,9 @@ A configuration that implies protection without delivering it is worse than no c
 
 ## Scope
 
-This document concerns the default profile, the three shipped policies (`strict`, `dev`, `yolo`), and the `claude-dev` wrapper. It does not cover custom profiles or policies users write themselves, nor does it cover Claude Code itself beyond the surfaces this tool configures.
+This document concerns the default profile, the three shipped policies (`strict`, `dev`, `yolo`), and the `vigil-dev` wrapper. It does not cover custom profiles or policies users write themselves, nor does it cover Claude Code itself beyond the surfaces this tool configures.
 
-The scope also assumes Claude Code is launched through the session wrappers in `claude-aliases.sh`. Launches via the VS Code extension or the Claude Code desktop app receive the default profile's deny list, hooks, and sandbox configuration, but do not receive session logging, the environment scrub, or per-session policy selection. Mitigations that depend on the posture layer — the audit trail and the env-scrub layer described below — do not apply to desktop-app or extension launches.
+The scope also assumes Claude Code is launched through the session wrappers in `vigil-aliases.sh`. Launches via the VS Code extension or the Claude Code desktop app receive the default profile's deny list, hooks, and sandbox configuration, but do not receive session logging, the environment scrub, or per-session policy selection. Mitigations that depend on the posture layer — the audit trail and the env-scrub layer described below — do not apply to desktop-app or extension launches.
 
 ## Adversaries
 
@@ -18,9 +18,9 @@ Four adversary models in increasing order of threat. The tool's protections vary
 
 ### 1. Inattentive operator
 
-The user's own momentary lapse — approving a command without reading it, pasting a prompt that contains unvetted instructions, or running `claude-dev` in the wrong directory. No malice involved.
+The user's own momentary lapse — approving a command without reading it, pasting a prompt that contains unvetted instructions, or running `vigil-dev` in the wrong directory. No malice involved.
 
-**Mitigations this tool provides:** strong. The deny list blocks bright-line destructive commands (`rm`, `sudo`, destructive git, network fetchers, SSH-family tools) regardless of operator approval. The default profile's plan mode surfaces every action before it runs. `claude-dev` pins the working directory to the git root so an "in the wrong directory" mistake is caught by `git rev-parse` rather than by a prompt the user might accept absent-mindedly.
+**Mitigations this tool provides:** strong. The deny list blocks bright-line destructive commands (`rm`, `sudo`, destructive git, network fetchers, SSH-family tools) regardless of operator approval. The default profile's plan mode surfaces every action before it runs. `vigil-dev` pins the working directory to the git root so an "in the wrong directory" mistake is caught by `git rev-parse` rather than by a prompt the user might accept absent-mindedly.
 
 ### 2. Buggy agent
 
@@ -66,14 +66,14 @@ This layer is load-bearing for prompt-injection and buggy-agent threats. Sandbox
 
 Always-on protections for `.git/` (non-claude subfolders), `.gitconfig`, shell RC files, `.mcp.json`, and specific `.claude/` entries. Not configurable from this tool; documented here because they're part of the operative defense.
 
-### Env-scrub layer (claude-aliases.sh wrappers)
+### Env-scrub layer (vigil-aliases.sh wrappers)
 
-The shell wrappers (`claude`, `claude-strict`, `claude-dev`, `claude-yolo`) launch Claude in a subshell whose environment has been reduced to a curated allowlist (PATH, HOME, locale, SSH agent socket, GPG, XDG, editor, display, `CLAUDE_*`, plus `LC_*` and `GIT_*` by prefix). Credential vars (`AWS_*`, `GITHUB_*`, `ANTHROPIC_API_KEY`, `NPM_TOKEN`, `*_SECRET`, `*_PASSWORD`, …) are unset before Claude inherits them. **Catches:** environment-variable interpolation as an exfiltration channel for credentials sourced from the operator's shell. **Does not catch:** secrets read from disk by allowed paths, secrets in shell history, or the case where an operator launches `claude` directly without the wrapper.
+The shell wrappers (`vigil`, `vigil-strict`, `vigil-dev`, `vigil-yolo`) launch Claude in a subshell whose environment has been reduced to a curated allowlist (PATH, HOME, locale, SSH agent socket, GPG, XDG, editor, display, `CLAUDE_CONFIG_DIR`, plus `LC_*` and `GIT_*` by prefix). Credential vars (`AWS_*`, `GITHUB_*`, `ANTHROPIC_API_KEY`, `NPM_TOKEN`, `*_SECRET`, `*_PASSWORD`, …) are unset before Claude inherits them. **Catches:** environment-variable interpolation as an exfiltration channel for credentials sourced from the operator's shell. **Does not catch:** secrets read from disk by allowed paths, secrets in shell history, or the case where an operator launches the bare `claude` command directly — after the Vigil rename `claude` falls through to the upstream Claude Code binary with no env scrub or session logging.
 
 The allowlist is extensible from the operator's own `~/.bashrc`:
 
 ```
-_claude_env_allowlist+=(AWS_PROFILE AWS_REGION)
+_vigil_env_allowlist+=(AWS_PROFILE AWS_REGION)
 ```
 
 ### Out of scope
@@ -96,7 +96,7 @@ _claude_env_allowlist+=(AWS_PROFILE AWS_REGION)
 - `git commit -am "legitimate-looking-change"` where the change is actually malicious (commit poisoning). The dev policy allows commits by design.
 - `echo 'base64-encoded-bad-script' | base64 -d | bash` — sandbox catches outbound network and filesystem misuse, but a payload that stays within the sandbox (e.g., reads and commits project files) still runs.
 - An agent constructing a malicious PR body that includes exfiltrated data from the project, and the operator approving `gh pr create`. The `gh` CLI is not denied; its credential file is denied at read but `gh` itself may authenticate via another mechanism.
-- A prompt that convinces the operator to run `claude-dev` on a directory containing credentials as project files.
+- A prompt that convinces the operator to run `vigil-dev` on a directory containing credentials as project files.
 - An agent reading credential files via Claude Code's *in-process* Read tool. The sandbox's `denyRead` only applies to subprocesses (Bash); the Read/Write/Edit tools run in-process and bypass it. The permission layer's `Read(/home/.../.ssh/**)` denies are the only protection against this channel, and we have not been able to verify that they fire (Claude's training refuses such reads before the matcher engages — a third defense layer that, ironically, also blocks our test).
 
 ## Residual risk
@@ -121,7 +121,7 @@ An attacker cannot plausibly (without further misconfiguration):
 
 - **Default profile, no policy:** safest. Plan mode means nothing happens without review.
 - **`strict`:** equivalent to default profile. Safe for any context.
-- **`dev` / `claude-dev`:** safe for *trusted project code* where you would be comfortable letting the operator auto-accept edits. Not safe if the project contains executable content from untrusted sources (e.g., a directory of downloaded scripts). Commit poisoning is the primary residual risk.
+- **`dev` / `vigil-dev`:** safe for *trusted project code* where you would be comfortable letting the operator auto-accept edits. Not safe if the project contains executable content from untrusted sources (e.g., a directory of downloaded scripts). Commit poisoning is the primary residual risk.
 - **`yolo`:** safe only for throwaway work on throwaway data. The two remaining denies (`rm`, `sudo`) prevent the worst catastrophes but nothing else.
 
 ## Verification status

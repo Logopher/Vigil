@@ -12,7 +12,7 @@ These are honest limits, not bugs to fix. Listed so a maintainer encountering od
 
 ### Platform support
 
-- **macOS/BSD `script(1)` branching not runtime-tested.** `claude-aliases.sh` adapts its `script(1)` invocation per `uname`, and Tier 6 statically verifies the case patterns cover the supported platforms, but the BSD branch has never run on a Mac/BSD host. The first such run is the test. `COMPATIBILITY.md` flags this honestly.
+- **macOS/BSD `script(1)` branching not runtime-tested.** `vigil-aliases.sh` adapts its `script(1)` invocation per `uname`, and Tier 6 statically verifies the case patterns cover the supported platforms, but the BSD branch has never run on a Mac/BSD host. The first such run is the test. `COMPATIBILITY.md` flags this honestly.
 - **Windows (Git Bash / MSYS2) untested.** `prune-worktrees.sh` includes Windows path handling; the rest is unexercised.
 
 ### Test-suite limits
@@ -33,14 +33,14 @@ Each item is substantial enough to deserve its own session. Pick one, plan it, s
 
 ## Stage 2 — needs versioning / wider design
 
-These widen appeal to less-technical users without compromising the security model. Each removes a friction point but depends on infrastructure (versioning, the `claude-config` umbrella CLI) that doesn't exist yet.
+These widen appeal to less-technical users without compromising the security model. Each removes a friction point but depends on infrastructure (versioning, the `vigil` umbrella CLI) that doesn't exist yet.
 
 - **One-line installer.** `curl -fsSL <url> | bash` — the standard for friend-distributed dotfiles tools. Removes "clone the repo, cd into it, run install.sh" to a single paste. Trade-off: encourages running unread shell. Mitigate with a pre-install banner that names what's about to happen and exits-on-N if interactive.
-- **`claude-config` CLI wrapper.** Single command for common operations: `claude-config update`, `claude-config doctor`, `claude-config policy dev` (sets default policy via shell function or env var). Centralizes paths users currently have to remember. Pairs naturally with `doctor.sh`.
+- **`vigil` CLI wrapper.** Single command for common operations: `vigil update`, `vigil doctor`, `vigil policy dev` (sets default policy via shell function or env var). Centralizes paths users currently have to remember. Pairs naturally with `doctor.sh`.
 - **Pre-flight check at install time.** Verify Claude Code is installed, sandbox is supported on the platform, `python3` is available, before the installer makes any changes. Today the installer assumes all this and fails cryptically when wrong. ~20 lines; turns confusing failure into "missing X, run Y to install."
-- **Better install.sh error messages.** When bwrap fails, when `python3` is missing, when a path conflict is found — point at `claude-config doctor` (once it exists) and a one-line "run X to diagnose." Avoids stranding users at cryptic Linux errors.
+- **Better install.sh error messages.** When bwrap fails, when `python3` is missing, when a path conflict is found — point at `vigil doctor` (once it exists) and a one-line "run X to diagnose." Avoids stranding users at cryptic Linux errors.
 - **A "casual" preset profile.** Not strict, not yolo, not dev — tuned for "personal laptop, not handling production data, wants safety but minimal friction." Could become the default for new installs, with `strict` promoted to "for production / shared / sensitive machines." Lowers the floor for users who aren't ready to think about the strict/dev/yolo trade-off.
-- **Auto-update mechanism.** `claude-config update` fetches latest, runs the update flow that `update.sh` automates. Needs versioning first. Removes manual `git pull` cycle.
+- **Auto-update mechanism.** `vigil update` fetches latest, runs the update flow that `update.sh` automates. Needs versioning first. Removes manual `git pull` cycle.
 
 ## Considered and not pursued
 

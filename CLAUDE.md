@@ -4,20 +4,20 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Purpose
 
-This repo holds the user's personal Claude Code configuration, also intended for deployment to friends' machines. `./install.sh` copies the default profile directly into `~/.claude/` (a real directory) and installs the shell alias, policies, and a convenience symlink under `~/.config/claude-config/`. Edits here only take effect after re-running the installer — the copy is a deliberate firewall between repo state and live session behavior.
+This repo holds Vigil, the user's personal paranoid Claude Code configuration, also intended for deployment to friends' machines. `./install.sh` copies the default profile directly into `~/.claude/` (a real directory) and installs the shell wrappers, policies, and a convenience symlink under `~/.config/vigil/`. Edits here only take effect after re-running the installer — the copy is a deliberate firewall between repo state and live session behavior.
 
 Repo layout:
 
 - `profiles/<name>/` — per-profile bundle: `settings.template.json`, `CLAUDE.md`, `hooks/*.sh`. The default profile is strict-by-construction.
-- `policies/<name>.json` — permission overlays invoked per session via `claude --settings ~/.config/claude-config/policies/<name>.json`. Current set: `strict`, `dev`, `yolo`.
-- `claude-aliases.sh` — sourced from `~/.bashrc` (from the installed copy at `~/.config/claude-config/claude-aliases.sh`); wraps the `claude` CLI with `script(1)` to record each session under `~/claude-logs/session-<timestamp>.log`.
-- `install.sh` — copy-based installer; moves any prior install to a `.bak-<timestamp>` path unless `--force`.
+- `policies/<name>.json` — permission overlays invoked per session via `claude --settings ~/.config/vigil/policies/<name>.json`. Current set: `strict`, `dev`, `yolo`.
+- `vigil-aliases.sh` — sourced from `~/.bashrc` (from the installed copy at `~/.config/vigil/vigil-aliases.sh`); wraps the `claude` CLI with `script(1)` and exposes `vigil`, `vigil-dev`, `vigil-strict`, `vigil-yolo`, and `vigil-log*` entry points. Session transcripts land under `~/vigil-logs/session-<timestamp>.log`.
+- `install.sh` — copy-based installer; refuses to run if any destination node already exists.
 
 ## Architecture
 
 Two layers of configuration, merged by the Claude Code harness at session start:
 
-1. **Profile** (`~/.claude/settings.json`) — sandbox mode, the baseline `deny` list, and hooks wiring. Default profile is plan-mode with a hard `deny` list covering `rm`, `sudo`, non-read-only `git`, network fetchers (`curl`, `wget`), SSH-family tools (`ssh`, `scp`, `rsync`, etc.), language runtimes (`node`, `python`, `python3`, `npx`), a few risky tools (`npm publish`, `docker`, `kubectl`), and credential paths (`~/.ssh/`, `~/.aws/`, etc.). `~/.claude/` is a real directory shared with Claude Code's runtime state (credentials, sessions, history). A convenience symlink at `~/.config/claude-config/profiles/default` points to `~/.claude/`.
+1. **Profile** (`~/.claude/settings.json`) — sandbox mode, the baseline `deny` list, and hooks wiring. Default profile is plan-mode with a hard `deny` list covering `rm`, `sudo`, non-read-only `git`, network fetchers (`curl`, `wget`), SSH-family tools (`ssh`, `scp`, `rsync`, etc.), language runtimes (`node`, `python`, `python3`, `npx`), a few risky tools (`npm publish`, `docker`, `kubectl`), and credential paths (`~/.ssh/`, `~/.aws/`, etc.). `~/.claude/` is a real directory shared with Claude Code's runtime state (credentials, sessions, history). A convenience symlink at `~/.config/vigil/profiles/default` points to `~/.claude/`.
 2. **Policy** (optional, via `claude --settings .../policies/<name>.json`) — permissions overlay. `strict` matches the profile baseline; `dev` enables `acceptEdits` with an allow list for routine dev commands and ask-gates for risky ones; `yolo` bypasses confirmations except for `rm` and `sudo`. Hooks from the profile persist across policy overrides.
 
 A non-default profile is selected by setting `CLAUDE_CONFIG_DIR` for the session; the default (no env var) reads from `~/.claude`, which is the default profile.
@@ -25,11 +25,11 @@ A non-default profile is selected by setting `CLAUDE_CONFIG_DIR` for the session
 Hooks registered in the default profile:
 
 - `SessionStart` / `SessionEnd` → `hooks/prune-worktrees.sh`
-- `SessionStart` → `hooks/prune-logs.sh` (retention for `~/claude-logs/`; defaults 90d age, 2G cap)
+- `SessionStart` → `hooks/prune-logs.sh` (retention for `~/vigil-logs/`; defaults 90d age, 2G cap)
 - `PreToolUse` → `hooks/log-tool-use.sh` (appends JSON payload to the session log)
 - `PostToolUse` → `hooks/log-tool-result.sh`
 
-Hook paths in the template use the `{{PROFILE_DIR}}` placeholder; the installer substitutes the installed profile directory when generating `settings.json`. The logging hooks rely on `CLAUDE_SESSION_ID` and `CLAUDE_LOG_DIR` exported by `claude-aliases.sh` — if Claude is launched without that wrapper sourced, the hooks write to an undefined path.
+Hook paths in the template use the `{{PROFILE_DIR}}` placeholder; the installer substitutes the installed profile directory when generating `settings.json`. The logging hooks rely on `VIGIL_SESSION_ID` and `VIGIL_LOG_DIR` exported by `vigil-aliases.sh` — if Claude is launched without that wrapper sourced, the hooks write to an undefined path.
 
 The sandbox `denyRead` and `denyWrite` lists are *not* defined in `settings.template.json`. Their authoritative source is the master tuples (`MASTER_DENY_READ`, `MASTER_DENY_WRITE`) at the top of `scripts/filter-sandbox-denies.py`. The installer invokes that script after writing `settings.json`; the script overwrites the two arrays with the master entries that currently pass bubblewrap's mount-target type check. To change the desired deny set, edit the Python source — not the JSON template. The script is safe to re-run standalone (e.g., after installing a new CLI that creates `~/.aws/`) to refresh the lists without a full reinstall.
 
@@ -47,7 +47,7 @@ Worktree matching is by basename, not full path, to survive Windows/MSYS2 path-f
 
 - Permission lists in the JSON files are order-insensitive but duplicates between `allow`/`deny` resolve to `deny` — add to `deny` rather than removing from `allow` when tightening.
 - Use the colon matcher form (`Bash(rm:*)`) for deny/allow patterns; the space form (`Bash(rm *)`) is non-standard.
-- Edits to this repo do not take effect until `./install.sh` copies the changes into `~/.config/claude-config/`. **Do not run `install.sh` yourself — that is the developer's job.** Make the edits, commit them, and leave installation to the developer.
+- Edits to this repo do not take effect until `./install.sh` copies the changes into `~/.config/vigil/`. **Do not run `install.sh` yourself — that is the developer's job.** Make the edits, commit them, and leave installation to the developer.
 
 ## Collaboration rules
 

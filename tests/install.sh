@@ -86,6 +86,21 @@ else
 fi
 
 # -----------------------------------------------------------------------------
+section "Install root is ~/.config/vigil (Vigil rebrand regression)"
+# Guards against a regression where the rebrand is partially reverted and
+# install.sh drops content back into the legacy ~/.config/claude-config path.
+if [[ -d "$home/.config/vigil" ]]; then
+    pass "install created ~/.config/vigil"
+else
+    fail "install did not create ~/.config/vigil"
+fi
+if [[ -e "$home/.config/claude-config" ]]; then
+    fail "install unexpectedly created legacy ~/.config/claude-config"
+else
+    pass "no legacy ~/.config/claude-config created"
+fi
+
+# -----------------------------------------------------------------------------
 section "Symlink direction: profiles/default -> ~/.claude"
 profile_symlink="$home/.config/vigil/profiles/default"
 if [[ -L "$profile_symlink" ]]; then

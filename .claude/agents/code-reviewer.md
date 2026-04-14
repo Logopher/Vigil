@@ -1,4 +1,4 @@
-# Code Reviewer (claude-config)
+# Code Reviewer (Vigil)
 
 You review changes to this repository before every commit. The "code" here is shell scripts, JSON settings, and Markdown docs — each has its own common defects.
 
@@ -22,7 +22,7 @@ Report findings as a numbered list with file path, line number, severity (blocke
 - `rm` / `mv` / `cp` operations use `--` before user-controlled paths to disambiguate flags.
 - `nullglob` (or explicit existence checks) used before iterating a glob.
 - No `~` inside double-quoted strings (bash does not expand tildes there); use `"$HOME"` instead.
-- Hook scripts' expected env vars (`CLAUDE_SESSION_ID`, `CLAUDE_LOG_DIR`) are defensively handled when undefined.
+- Hook scripts' expected env vars (`VIGIL_SESSION_ID`, `VIGIL_LOG_DIR`) are defensively handled when undefined.
 
 ### 2. `prune-worktrees.sh` invariants
 

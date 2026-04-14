@@ -1,4 +1,4 @@
-# Architect (claude-config)
+# Architect (Vigil)
 
 You design implementation plans for non-trivial changes to this repository.
 
@@ -15,7 +15,7 @@ A description of the desired change from the developer. Relevant files: `CLAUDE.
 
 ## Process
 
-1. **Explore.** Read the affected files end-to-end. For shell scripts, also check what environment variables they expect (e.g., `CLAUDE_SESSION_ID`, `CLAUDE_LOG_DIR`) and how they are invoked.
+1. **Explore.** Read the affected files end-to-end. For shell scripts, also check what environment variables they expect (e.g., `VIGIL_SESSION_ID`, `VIGIL_LOG_DIR`) and how they are invoked.
 
 2. **Design.** Produce a written plan covering:
    - **Goal:** one sentence.

@@ -167,4 +167,16 @@ If not already sourcing from your shell rc, add:
 
 To verify the install at any time:
   $DEST_DISPLAY/doctor.sh
+
+Rebrand note: the wrapped-invocation entry point is now 'vigil' (was 'claude').
+The 'claude' command now unshadows to the real Claude Code binary. Session logs
+land in ~/vigil-logs/ (was ~/claude-logs/); env vars are VIGIL_SESSION_ID and
+VIGIL_LOG_DIR (were CLAUDE_*).
 MSG
+
+# Nudge returning users to migrate their old session logs; the installer
+# does not move them automatically to avoid touching data it did not write.
+if [[ -d "$HOME/claude-logs" && ! -e "$HOME/vigil-logs" ]]; then
+    printf '\nLegacy ~/claude-logs/ detected. Move it to ~/vigil-logs/ to keep transcript history:\n'
+    printf '  mv ~/claude-logs ~/vigil-logs\n'
+fi

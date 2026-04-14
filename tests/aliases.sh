@@ -2,9 +2,9 @@
 # Tier 5 claude-aliases.sh behavior tests.
 #
 # Strategy: source the aliases file, override the internal helper
-# _claude_run_with_logging with a stub that records $PWD and args to
+# _vigil_run_with_logging with a stub that records $PWD and args to
 # a capture file. This bypasses script(1) and the real claude binary
-# (neither is needed to test the cd + delegate behavior of claude-dev).
+# (neither is needed to test the cd + delegate behavior of vigil-dev).
 set -uo pipefail
 shopt -s nullglob
 
@@ -43,26 +43,33 @@ source "$REPO_DIR/claude-aliases.sh"
 
 # -----------------------------------------------------------------------------
 section "Function definitions present after sourcing"
-if [[ "$(type -t claude)" == "function" ]]; then
-    pass "claude is a function"
+if [[ "$(type -t vigil)" == "function" ]]; then
+    pass "vigil is a function"
 else
-    fail "claude is not a function (got: '$(type -t claude)')"
+    fail "vigil is not a function (got: '$(type -t vigil)')"
 fi
-if [[ "$(type -t claude-dev)" == "function" ]]; then
-    pass "claude-dev is a function"
+# After the rebrand, 'claude' must NOT be a shell function — it should fall
+# through to the upstream Claude Code binary (whatever 'command claude' resolves).
+if [[ "$(type -t claude 2>/dev/null)" == "function" ]]; then
+    fail "claude should not be a shell function after rebrand"
 else
-    fail "claude-dev is not a function (got: '$(type -t claude-dev)')"
+    pass "claude is not shadowed by a shell function"
 fi
-if [[ "$(type -t _claude_run_with_logging)" == "function" ]]; then
-    pass "_claude_run_with_logging helper is a function"
+if [[ "$(type -t vigil-dev)" == "function" ]]; then
+    pass "vigil-dev is a function"
 else
-    fail "_claude_run_with_logging helper is not a function"
+    fail "vigil-dev is not a function (got: '$(type -t vigil-dev)')"
+fi
+if [[ "$(type -t _vigil_run_with_logging)" == "function" ]]; then
+    pass "_vigil_run_with_logging helper is a function"
+else
+    fail "_vigil_run_with_logging helper is not a function"
 fi
 
 # -----------------------------------------------------------------------------
 # Replace the helper with a stub that records where it was invoked from
 # and with what arguments. Subshells inherit this redefinition.
-_claude_run_with_logging() {
+_vigil_run_with_logging() {
     {
         printf 'PHYS_PWD='
         pwd -P
@@ -72,7 +79,7 @@ _claude_run_with_logging() {
 }
 
 # -----------------------------------------------------------------------------
-section "claude-dev cds to git repo root from a subdirectory"
+section "vigil-dev cds to git repo root from a subdirectory"
 repo=$(mktmp_dir)
 git -C "$repo" init -q
 git -C "$repo" config user.email "test@example.test"
@@ -85,33 +92,33 @@ mkdir -p "$repo/sub/nested/deep"
 
 CAPTURE_FILE=$(mktmp_file)
 export CAPTURE_FILE
-( cd "$repo/sub/nested/deep" && claude-dev )
+( cd "$repo/sub/nested/deep" && vigil-dev )
 
 captured=$(grep '^PHYS_PWD=' "$CAPTURE_FILE" | head -1 | cut -d= -f2-)
 expected=$(cd "$repo" && pwd -P)
 if [[ "$captured" == "$expected" ]]; then
-    pass "claude-dev from subdir ran in repo root"
+    pass "vigil-dev from subdir ran in repo root"
 else
-    fail "claude-dev ran in '$captured' (expected '$expected')"
+    fail "vigil-dev ran in '$captured' (expected '$expected')"
 fi
 
 # -----------------------------------------------------------------------------
-section "claude-dev in non-git directory stays in the current directory"
+section "vigil-dev in non-git directory stays in the current directory"
 nongit=$(mktmp_dir)
 CAPTURE_FILE=$(mktmp_file)
 export CAPTURE_FILE
-( cd "$nongit" && claude-dev )
+( cd "$nongit" && vigil-dev )
 
 captured=$(grep '^PHYS_PWD=' "$CAPTURE_FILE" | head -1 | cut -d= -f2-)
 expected=$(cd "$nongit" && pwd -P)
 if [[ "$captured" == "$expected" ]]; then
-    pass "claude-dev in non-git dir runs in that dir"
+    pass "vigil-dev in non-git dir runs in that dir"
 else
-    fail "claude-dev ran in '$captured' (expected '$expected')"
+    fail "vigil-dev ran in '$captured' (expected '$expected')"
 fi
 
 # -----------------------------------------------------------------------------
-section "claude-dev does not disturb caller's cwd"
+section "vigil-dev does not disturb caller's cwd"
 repo=$(mktmp_dir)
 git -C "$repo" init -q
 git -C "$repo" config user.email "test@example.test"
@@ -123,17 +130,17 @@ mkdir -p "$repo/sub"
 outer_before=$(cd "$repo/sub" && pwd -P)
 CAPTURE_FILE=$(mktmp_file)
 export CAPTURE_FILE
-# Invoke claude-dev from a subdir; verify that after return the caller's
-# cwd is unchanged (claude-dev cds inside a subshell).
-outer_after=$(cd "$repo/sub" && claude-dev && pwd -P)
+# Invoke vigil-dev from a subdir; verify that after return the caller's
+# cwd is unchanged (vigil-dev cds inside a subshell).
+outer_after=$(cd "$repo/sub" && vigil-dev && pwd -P)
 if [[ "$outer_before" == "$outer_after" ]]; then
-    pass "caller's cwd preserved across claude-dev"
+    pass "caller's cwd preserved across vigil-dev"
 else
     fail "caller's cwd changed: '$outer_before' -> '$outer_after'"
 fi
 
 # -----------------------------------------------------------------------------
-section "claude-dev passes --settings path and user args to the helper"
+section "vigil-dev passes --settings path and user args to the helper"
 repo=$(mktmp_dir)
 git -C "$repo" init -q
 git -C "$repo" config user.email "test@example.test"
@@ -143,77 +150,77 @@ touch "$repo/f" && git -C "$repo" add f && git -C "$repo" commit -q -m init
 
 CAPTURE_FILE=$(mktmp_file)
 export CAPTURE_FILE
-( cd "$repo" && claude-dev --model claude-sonnet-4-6 "prompt text" )
+( cd "$repo" && vigil-dev --model claude-sonnet-4-6 "prompt text" )
 
 args=$(grep '^ARGS=' "$CAPTURE_FILE" | head -1 | cut -d= -f2-)
 # Expect --settings <path-to-dev.json> at the front, then the user's args.
 if [[ "$args" == *"--settings "*"/policies/dev.json"* ]]; then
-    pass "claude-dev passes --settings policies/dev.json"
+    pass "vigil-dev passes --settings policies/dev.json"
 else
-    fail "claude-dev did not pass expected --settings (got: $args)"
+    fail "vigil-dev did not pass expected --settings (got: $args)"
 fi
 if [[ "$args" == *"--model claude-sonnet-4-6"* ]]; then
-    pass "claude-dev forwards user flags"
+    pass "vigil-dev forwards user flags"
 else
-    fail "claude-dev did not forward --model (got: $args)"
+    fail "vigil-dev did not forward --model (got: $args)"
 fi
 if [[ "$args" == *"prompt text"* ]]; then
-    pass "claude-dev forwards user positional args"
+    pass "vigil-dev forwards user positional args"
 else
-    fail "claude-dev did not forward positional arg (got: $args)"
+    fail "vigil-dev did not forward positional arg (got: $args)"
 fi
 
 # -----------------------------------------------------------------------------
-section "claude-strict passes --settings policies/strict.json + user args"
+section "vigil-strict passes --settings policies/strict.json + user args"
 CAPTURE_FILE=$(mktmp_file)
 export CAPTURE_FILE
-claude-strict --model claude-sonnet-4-6 "strict prompt"
+vigil-strict --model claude-sonnet-4-6 "strict prompt"
 
 args=$(grep '^ARGS=' "$CAPTURE_FILE" | head -1 | cut -d= -f2-)
 if [[ "$args" == *"--settings "*"/policies/strict.json"* ]]; then
-    pass "claude-strict passes --settings policies/strict.json"
+    pass "vigil-strict passes --settings policies/strict.json"
 else
-    fail "claude-strict did not pass expected --settings (got: $args)"
+    fail "vigil-strict did not pass expected --settings (got: $args)"
 fi
 if [[ "$args" == *"--model claude-sonnet-4-6"* ]]; then
-    pass "claude-strict forwards user flags"
+    pass "vigil-strict forwards user flags"
 else
-    fail "claude-strict did not forward --model (got: $args)"
+    fail "vigil-strict did not forward --model (got: $args)"
 fi
 if [[ "$args" == *"strict prompt"* ]]; then
-    pass "claude-strict forwards user positional args"
+    pass "vigil-strict forwards user positional args"
 else
-    fail "claude-strict did not forward positional arg (got: $args)"
+    fail "vigil-strict did not forward positional arg (got: $args)"
 fi
 
 # -----------------------------------------------------------------------------
-section "claude-yolo passes --settings policies/yolo.json + user args"
+section "vigil-yolo passes --settings policies/yolo.json + user args"
 CAPTURE_FILE=$(mktmp_file)
 export CAPTURE_FILE
-claude-yolo --print "yolo prompt"
+vigil-yolo --print "yolo prompt"
 
 args=$(grep '^ARGS=' "$CAPTURE_FILE" | head -1 | cut -d= -f2-)
 if [[ "$args" == *"--settings "*"/policies/yolo.json"* ]]; then
-    pass "claude-yolo passes --settings policies/yolo.json"
+    pass "vigil-yolo passes --settings policies/yolo.json"
 else
-    fail "claude-yolo did not pass expected --settings (got: $args)"
+    fail "vigil-yolo did not pass expected --settings (got: $args)"
 fi
 if [[ "$args" == *"--print"* ]]; then
-    pass "claude-yolo forwards user flags"
+    pass "vigil-yolo forwards user flags"
 else
-    fail "claude-yolo did not forward --print (got: $args)"
+    fail "vigil-yolo did not forward --print (got: $args)"
 fi
 if [[ "$args" == *"yolo prompt"* ]]; then
-    pass "claude-yolo forwards user positional args"
+    pass "vigil-yolo forwards user positional args"
 else
-    fail "claude-yolo did not forward positional arg (got: $args)"
+    fail "vigil-yolo did not forward positional arg (got: $args)"
 fi
 
 # -----------------------------------------------------------------------------
 section "Env scrub: credential vars stripped, allowlist preserved"
-# Re-source aliases to restore the real _claude_run_with_logging — the
+# Re-source aliases to restore the real _vigil_run_with_logging — the
 # scrub happens inside it and earlier tests have stubbed it out.
-unset -f _claude_run_with_logging
+unset -f _vigil_run_with_logging
 # shellcheck source=../claude-aliases.sh
 source "$REPO_DIR/claude-aliases.sh"
 
@@ -253,7 +260,7 @@ STUB
 chmod +x "$shim_dir/claude"
 
 # Allow ENV_CAPTURE through the scrub so the stub can write it back.
-_claude_env_allowlist+=(ENV_CAPTURE)
+_vigil_env_allowlist+=(ENV_CAPTURE)
 
 # Set credential-style vars (should be scrubbed) and one of each
 # allowlist category (should survive).
@@ -265,7 +272,7 @@ export MY_CUSTOM_SECRET=should-be-scrubbed
 export LC_TEST_VAR=should-survive
 export GIT_AUTHOR_NAME=should-survive
 
-HOME="$fake_home" PATH="$shim_dir:$PATH" claude
+HOME="$fake_home" PATH="$shim_dir:$PATH" vigil
 
 assert_absent() {
     local var="$1"
@@ -294,8 +301,8 @@ assert_present PATH
 assert_present HOME
 assert_present LC_TEST_VAR
 assert_present GIT_AUTHOR_NAME
-assert_present CLAUDE_SESSION_ID
-assert_present CLAUDE_LOG_DIR
+assert_present VIGIL_SESSION_ID
+assert_present VIGIL_LOG_DIR
 
 # Subshell isolation: the wrapper unsets vars inside its subshell, so
 # the parent test shell must still see the originals.
@@ -309,88 +316,88 @@ unset AWS_SECRET_ACCESS_KEY GITHUB_TOKEN ANTHROPIC_API_KEY NPM_TOKEN \
       MY_CUSTOM_SECRET LC_TEST_VAR GIT_AUTHOR_NAME ENV_CAPTURE
 
 # -----------------------------------------------------------------------------
-section "claude-log: error when no transcripts present"
+section "vigil-log: error when no transcripts present"
 fake_home=$(mktmp_dir)
-out=$(HOME="$fake_home" claude-log 2>&1)
+out=$(HOME="$fake_home" vigil-log 2>&1)
 rc=$?
 if [[ $rc -ne 0 ]] && grep -q "no transcripts" <<<"$out"; then
-    pass "claude-log errors when no transcripts present"
+    pass "vigil-log errors when no transcripts present"
 else
-    fail "claude-log should fail with 'no transcripts' (rc=$rc, out=$out)"
+    fail "vigil-log should fail with 'no transcripts' (rc=$rc, out=$out)"
 fi
 
 # -----------------------------------------------------------------------------
-section "claude-log: index selection (no arg, -1, -2, out-of-range)"
+section "vigil-log: index selection (no arg, -1, -2, out-of-range)"
 fake_home=$(mktmp_dir)
-mkdir -p "$fake_home/claude-logs"
+mkdir -p "$fake_home/vigil-logs"
 # Lex-sortable timestamps so newest = highest = ...0412.
-echo "session A" > "$fake_home/claude-logs/session-20260410-100000.txt"
-echo "session B" > "$fake_home/claude-logs/session-20260411-100000.txt"
-echo "session C" > "$fake_home/claude-logs/session-20260412-100000.txt"
+echo "session A" > "$fake_home/vigil-logs/session-20260410-100000.txt"
+echo "session B" > "$fake_home/vigil-logs/session-20260411-100000.txt"
+echo "session C" > "$fake_home/vigil-logs/session-20260412-100000.txt"
 
-out=$(HOME="$fake_home" PAGER=cat claude-log)
+out=$(HOME="$fake_home" PAGER=cat vigil-log)
 if [[ "$out" == "session C" ]]; then
-    pass "claude-log (no arg) returns most recent"
+    pass "vigil-log (no arg) returns most recent"
 else
-    fail "claude-log no-arg got '$out' (expected 'session C')"
+    fail "vigil-log no-arg got '$out' (expected 'session C')"
 fi
 
-out=$(HOME="$fake_home" PAGER=cat claude-log -1)
+out=$(HOME="$fake_home" PAGER=cat vigil-log -1)
 if [[ "$out" == "session B" ]]; then
-    pass "claude-log -1 returns previous"
+    pass "vigil-log -1 returns previous"
 else
-    fail "claude-log -1 got '$out' (expected 'session B')"
+    fail "vigil-log -1 got '$out' (expected 'session B')"
 fi
 
-out=$(HOME="$fake_home" PAGER=cat claude-log -2)
+out=$(HOME="$fake_home" PAGER=cat vigil-log -2)
 if [[ "$out" == "session A" ]]; then
-    pass "claude-log -2 returns two-back"
+    pass "vigil-log -2 returns two-back"
 else
-    fail "claude-log -2 got '$out' (expected 'session A')"
+    fail "vigil-log -2 got '$out' (expected 'session A')"
 fi
 
-out=$(HOME="$fake_home" PAGER=cat claude-log -5 2>&1)
+out=$(HOME="$fake_home" PAGER=cat vigil-log -5 2>&1)
 rc=$?
 if [[ $rc -ne 0 ]] && grep -q "only" <<<"$out"; then
-    pass "claude-log out-of-range -N errors"
+    pass "vigil-log out-of-range -N errors"
 else
-    fail "claude-log -5 should error 'only N available' (rc=$rc, out=$out)"
+    fail "vigil-log -5 should error 'only N available' (rc=$rc, out=$out)"
 fi
 
 # -----------------------------------------------------------------------------
-section "claude-log: date prefix matching (compact + dashed forms)"
+section "vigil-log: date prefix matching (compact + dashed forms)"
 # Two transcripts on the same day; date-prefix returns the most recent.
-echo "morning" > "$fake_home/claude-logs/session-20260413-090000.txt"
-echo "evening" > "$fake_home/claude-logs/session-20260413-180000.txt"
+echo "morning" > "$fake_home/vigil-logs/session-20260413-090000.txt"
+echo "evening" > "$fake_home/vigil-logs/session-20260413-180000.txt"
 
-out=$(HOME="$fake_home" PAGER=cat claude-log 20260413)
+out=$(HOME="$fake_home" PAGER=cat vigil-log 20260413)
 if [[ "$out" == "evening" ]]; then
-    pass "claude-log <YYYYMMDD> returns most recent of that day"
+    pass "vigil-log <YYYYMMDD> returns most recent of that day"
 else
-    fail "claude-log 20260413 got '$out' (expected 'evening')"
+    fail "vigil-log 20260413 got '$out' (expected 'evening')"
 fi
 
-out=$(HOME="$fake_home" PAGER=cat claude-log 2026-04-13)
+out=$(HOME="$fake_home" PAGER=cat vigil-log 2026-04-13)
 if [[ "$out" == "evening" ]]; then
-    pass "claude-log <YYYY-MM-DD> strips dashes for match"
+    pass "vigil-log <YYYY-MM-DD> strips dashes for match"
 else
-    fail "claude-log 2026-04-13 got '$out' (expected 'evening')"
+    fail "vigil-log 2026-04-13 got '$out' (expected 'evening')"
 fi
 
-out=$(HOME="$fake_home" PAGER=cat claude-log 19990101 2>&1)
+out=$(HOME="$fake_home" PAGER=cat vigil-log 19990101 2>&1)
 rc=$?
 if [[ $rc -ne 0 ]] && grep -q "no transcript matching" <<<"$out"; then
-    pass "claude-log <unmatched date> errors"
+    pass "vigil-log <unmatched date> errors"
 else
-    fail "claude-log 19990101 should error (rc=$rc, out=$out)"
+    fail "vigil-log 19990101 should error (rc=$rc, out=$out)"
 fi
 
 # Multi-word PAGER (e.g. PAGER="less -R") must work via eval path.
-out=$(HOME="$fake_home" PAGER="cat -" claude-log)
+out=$(HOME="$fake_home" PAGER="cat -" vigil-log)
 if [[ -n "$out" ]]; then
-    pass "claude-log handles multi-word PAGER"
+    pass "vigil-log handles multi-word PAGER"
 else
-    fail "claude-log multi-word PAGER produced no output"
+    fail "vigil-log multi-word PAGER produced no output"
 fi
 
 exit $failed

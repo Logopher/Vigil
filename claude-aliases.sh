@@ -1,12 +1,12 @@
-# Curated env-var allowlist for the claude wrappers. Vars not on this
+# Curated env-var allowlist for the vigil wrappers. Vars not on this
 # list (and not matching LC_* or GIT_*) are unset before launching
 # Claude — the default sandbox covers filesystem reads but env vars
 # are inherited by every child process unless explicitly cleared.
 #
 # Add to this list (in your own ~/.bashrc, after sourcing this file)
 # to pass through additional non-secret vars, e.g.:
-#   _claude_env_allowlist+=(AWS_PROFILE AWS_REGION)
-_claude_env_allowlist=(
+#   _vigil_env_allowlist+=(AWS_PROFILE AWS_REGION)
+_vigil_env_allowlist=(
     HOME PATH USER LOGNAME SHELL PWD TMPDIR
     TERM COLORTERM NO_COLOR CLICOLOR
     LANG LC_ALL TZ
@@ -18,7 +18,7 @@ _claude_env_allowlist=(
     CLAUDE_CONFIG_DIR
 )
 
-_claude_run_with_logging() (
+_vigil_run_with_logging() (
     # Subshell so env scrubbing and exports don't leak back to the
     # interactive shell that invoked us.
 
@@ -35,22 +35,22 @@ _claude_run_with_logging() (
     # variable; unset on read-only or special vars fails harmlessly.
     # Membership check uses string match (not associative array) for
     # bash 3.2 compatibility — macOS ships /bin/bash 3.2.
-    # Loop-locals use the _claude_ prefix so the loop doesn't clobber
+    # Loop-locals use the _vigil_ prefix so the loop doesn't clobber
     # itself when it iterates over them via compgen -v.
-    local _claude_allow_str=" ${_claude_env_allowlist[*]} "
-    local _claude_v
-    while IFS= read -r _claude_v; do
-        [[ "$_claude_allow_str" == *" $_claude_v "* ]] && continue
-        [[ "$_claude_v" == LC_* ]] && continue
-        [[ "$_claude_v" == GIT_* ]] && continue
-        [[ "$_claude_v" == BASH* || "$_claude_v" == _ || "$_claude_v" == _claude_* ]] && continue
-        unset "$_claude_v" 2>/dev/null || true
+    local _vigil_allow_str=" ${_vigil_env_allowlist[*]} "
+    local _vigil_v
+    while IFS= read -r _vigil_v; do
+        [[ "$_vigil_allow_str" == *" $_vigil_v "* ]] && continue
+        [[ "$_vigil_v" == LC_* ]] && continue
+        [[ "$_vigil_v" == GIT_* ]] && continue
+        [[ "$_vigil_v" == BASH* || "$_vigil_v" == _ || "$_vigil_v" == _vigil_* ]] && continue
+        unset "$_vigil_v" 2>/dev/null || true
     done < <(compgen -v)
 
-    export CLAUDE_SESSION_ID=$(date +%Y%m%d-%H%M%S)
-    export CLAUDE_LOG_DIR="$HOME/claude-logs"
-    mkdir -p "$CLAUDE_LOG_DIR"
-    local logfile="$CLAUDE_LOG_DIR/session-$CLAUDE_SESSION_ID.log"
+    export VIGIL_SESSION_ID=$(date +%Y%m%d-%H%M%S)
+    export VIGIL_LOG_DIR="$HOME/vigil-logs"
+    mkdir -p "$VIGIL_LOG_DIR"
+    local logfile="$VIGIL_LOG_DIR/session-$VIGIL_SESSION_ID.log"
     case "$(uname)" in
         Darwin|*BSD)
             # BSD script(1): `script [-q] file command...`
@@ -71,25 +71,25 @@ _claude_run_with_logging() (
     fi
 )
 
-claude() {
-    _claude_run_with_logging "$@"
+vigil() {
+    _vigil_run_with_logging "$@"
 }
 
-claude-dev() {
+vigil-dev() {
     local project_root
     project_root="$(git rev-parse --show-toplevel 2>/dev/null)" || project_root="$PWD"
     (
         cd "$project_root" || return 1
-        _claude_run_with_logging --settings "$HOME/.config/vigil/policies/dev.json" "$@"
+        _vigil_run_with_logging --settings "$HOME/.config/vigil/policies/dev.json" "$@"
     )
 }
 
-claude-strict() {
-    _claude_run_with_logging --settings "$HOME/.config/vigil/policies/strict.json" "$@"
+vigil-strict() {
+    _vigil_run_with_logging --settings "$HOME/.config/vigil/policies/strict.json" "$@"
 }
 
-claude-yolo() {
-    _claude_run_with_logging --settings "$HOME/.config/vigil/policies/yolo.json" "$@"
+vigil-yolo() {
+    _vigil_run_with_logging --settings "$HOME/.config/vigil/policies/yolo.json" "$@"
 }
 
 # Open a session transcript in $PAGER. With no args, opens the most
@@ -102,9 +102,9 @@ claude-yolo() {
 #
 # Sorting relies on session filenames being fixed-width and lex-sortable
 # the same as chronologically — keep in sync with the session-filename
-# format used by _claude_run_with_logging above.
-claude-log() {
-    local logdir="$HOME/claude-logs"
+# format used by _vigil_run_with_logging above.
+vigil-log() {
+    local logdir="$HOME/vigil-logs"
     local pager="${PAGER:-less}"
     local arg="${1:-}"
 
@@ -113,7 +113,7 @@ claude-log() {
     shopt -u nullglob
 
     if [[ ${#all[@]} -eq 0 ]]; then
-        echo "claude-log: no transcripts in $logdir" >&2
+        echo "vigil-log: no transcripts in $logdir" >&2
         return 1
     fi
 
@@ -131,7 +131,7 @@ claude-log() {
     elif [[ "$arg" =~ ^-[0-9]+$ ]]; then
         local idx="${arg#-}"
         if (( idx >= ${#files[@]} )); then
-            echo "claude-log: only ${#files[@]} transcript(s) available" >&2
+            echo "vigil-log: only ${#files[@]} transcript(s) available" >&2
             return 1
         fi
         target="${files[$idx]}"
@@ -148,7 +148,7 @@ claude-log() {
             fi
         done
         if [[ -z "$target" ]]; then
-            echo "claude-log: no transcript matching '$arg'" >&2
+            echo "vigil-log: no transcript matching '$arg'" >&2
             return 1
         fi
     fi
@@ -158,15 +158,15 @@ claude-log() {
     eval "$pager $(printf '%q' "$target")"
 }
 
-# Prune ~/claude-logs. Forwards args to scripts/prune-logs.py; run
-# `claude-log-prune --help` for flags. The same script runs
+# Prune ~/vigil-logs. Forwards args to scripts/prune-logs.py; run
+# `vigil-log-prune --help` for flags. The same script runs
 # automatically at SessionStart (90d age, 2G cap) via the profile
 # hook; this wrapper is for manual on-demand pruning with custom
 # thresholds or --dry-run.
-claude-log-prune() {
+vigil-log-prune() {
     local script="$HOME/.config/vigil/scripts/prune-logs.py"
     if [[ ! -f "$script" ]]; then
-        echo "claude-log-prune: $script not found" >&2
+        echo "vigil-log-prune: $script not found" >&2
         return 1
     fi
     python3 "$script" "$@"

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prune Claude session logs under ~/claude-logs by age and total size.
+"""Prune Vigil session logs under ~/vigil-logs by age and total size.
 
 Usage:
     prune-logs.py [--log-dir DIR] [--older-than DURATION]
@@ -9,7 +9,7 @@ Targets files matching session-YYYYMMDD-HHMMSS.{log,txt} — the scheme
 produced by claude-aliases.sh. Files outside that pattern are never
 touched, so pointing --log-dir at the wrong directory is safe.
 
-Defaults: --log-dir ~/claude-logs, --older-than 90d. --max-total-size
+Defaults: --log-dir ~/vigil-logs, --older-than 90d. --max-total-size
 is only applied when explicitly set.
 
 A 10-minute mtime floor protects the currently-running session from
@@ -44,7 +44,8 @@ def parse_size(s: str) -> int:
 
 
 def parse_stamp(stamp: str) -> float:
-    # YYYYMMDD-HHMMSS — local time, matching claude-aliases.sh's `date +%Y%m%d-%H%M%S`.
+    # YYYYMMDD-HHMMSS — local time, matching the session-filename format
+    # produced by claude-aliases.sh via `date +%Y%m%d-%H%M%S`.
     return time.mktime(time.strptime(stamp, '%Y%m%d-%H%M%S'))
 
 
@@ -99,8 +100,8 @@ def delete_pair(files, dry_run: bool) -> int:
 
 
 def main(argv):
-    ap = argparse.ArgumentParser(description="Prune Claude session logs.")
-    ap.add_argument('--log-dir', default=str(Path.home() / 'claude-logs'))
+    ap = argparse.ArgumentParser(description="Prune Vigil session logs.")
+    ap.add_argument('--log-dir', default=str(Path.home() / 'vigil-logs'))
     ap.add_argument('--older-than', type=parse_duration, default=parse_duration('90d'))
     ap.add_argument('--max-total-size', type=parse_size, default=None)
     ap.add_argument('--dry-run', action='store_true')

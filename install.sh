@@ -180,3 +180,12 @@ if [[ -d "$HOME/claude-logs" && ! -e "$HOME/vigil-logs" ]]; then
     printf '\nLegacy ~/claude-logs/ detected. Move it to ~/vigil-logs/ to keep transcript history:\n'
     printf '  mv ~/claude-logs ~/vigil-logs\n'
 fi
+
+# Legacy install root is no longer read by Vigil — anything the operator
+# customized there (policy edits, user-added scripts) is silently ignored
+# until moved. Flag it so stale state isn't mistaken for active config.
+if [[ -d "$HOME/.config/claude-config" ]]; then
+    printf '\nLegacy ~/.config/claude-config/ detected. Vigil no longer reads from that path;\n'
+    printf 'any edits or user-added files there are being ignored. Move anything worth keeping\n'
+    printf 'into ~/.config/vigil/ and remove the old directory.\n'
+fi

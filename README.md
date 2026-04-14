@@ -1,82 +1,132 @@
-# Claude Configuration
+# Vigil
 
-Personal Claude Code configuration, designed to also be deployed to other machines.
+**Paranoid-by-default configuration for Claude Code.** Layered deny-lists, OS-level sandboxing, session audit hooks, and an install discipline that refuses to clobber existing state.
 
-## Who this is for
+## What Vigil does
 
-**Sweet spot.** A mid-to-senior developer comfortable in a Linux/WSL2/macOS terminal, security-aware enough to want a baseline for autonomous agents but uninterested in designing one from scratch. The split between profile (identity, hooks, sandbox) and policy (posture: `strict` / `dev` / `yolo`) should click quickly — it mirrors AWS profiles, browser profiles, and IAM policies.
+Vigil has two layers. The **default profile** (`~/.claude/settings.json`) — deny list, hooks, sandbox rules — constrains every Claude Code session regardless of launch context: the VS Code extension, the Claude Code desktop app, and the CLI all pick it up. The **posture layer** — policy overlays, session logging, and interactive convenience functions like `vigil-dev` — is implemented as bash and only activates when Claude Code is launched from an interactive shell. IDE and desktop-app launches receive the profile baseline; they do not receive the posture layer.
 
-**Above the sweet spot.** Senior developers with their own opinionated Claude config. Welcome to fork, steal ideas, or politely ignore.
+- Ships a strict-by-construction profile for Claude Code: plan mode, a hard deny list covering destructive, network, runtime-launch, and credential-path operations, and logging hooks for every tool call.
+- Provides three permission policies — `strict`, `dev`, `yolo` — selected per session as `--settings` overlays. Profile is identity; policy is posture.
+- Records every session under `~/vigil-logs/` via `script(1)`, retrievable by date or offset through the `vigil-log` wrapper.
+- Applies OS-level sandboxing where available; see [`COMPATIBILITY.md`](COMPATIBILITY.md) for per-platform status.
+- Refuses to overwrite an existing installation. There is no `--force` flag. Re-installation requires manual cleanup first, because the destination may contain Claude Code runtime state the installer cannot reconstruct for you.
 
-**Outside current scope.** Users without terminal proficiency; native Windows users without WSL (installer is bash-only); anyone unfamiliar with `~/.claude/settings.json` — whether they reach Claude through the desktop app, an IDE extension, or the CLI is irrelevant, but the tool's value depends on knowing *what configuration is* and being willing to manage it.
+## Who Vigil is for
 
-For the longer framing — including common misconceptions, the self-use vs. friend-deploy split, and a practical "is this for me?" test — see [`AUDIENCE.md`](AUDIENCE.md).
+**Sweet spot.** A mid-to-senior developer comfortable in a Linux / WSL2 / macOS terminal, security-aware enough to want a baseline for autonomous agents but uninterested in designing one from scratch. The split between profile (identity, hooks, sandbox) and policy (posture: `strict` / `dev` / `yolo`) should click quickly — it mirrors AWS profiles, browser profiles, and IAM policies.
 
-## Installation
+**Above the sweet spot.** Senior developers with their own opinionated Claude Code config. Welcome to fork, steal ideas, or politely ignore.
 
-Clone this repo anywhere, then run the installer:
+**Outside current scope.** Users without terminal proficiency; native Windows users without WSL (installer is bash-only); users unwilling to manage their own `~/.claude/settings.json`. The full value of Vigil depends on launching Claude Code through the bash wrappers; users whose Claude Code runs primarily through the VS Code extension or the desktop app receive the profile baseline (see [What Vigil does](#what-vigil-does) above) but not the posture layer.
+
+For the longer version — common misconceptions, self-use vs. friend-deploy split, and a practical "is this for me?" test — see [`AUDIENCE.md`](AUDIENCE.md).
+
+## How this was built
+
+Vigil was designed and implemented through extended collaboration with Claude. I'm a developer with security intuition; I'm not a credentialed security engineer. The threat model, deny-list composition, sandbox configuration, and install discipline reflect my best thinking, iterated across many Claude sessions and cross-checked against ecosystem documentation.
+
+Vigil is open-sourced specifically because I want scrutiny from people with deeper expertise than I have. If you find a weak mitigation, an oversold claim, a deny-list gap, or a sandbox bypass — open an issue. Teardowns are more useful to me than endorsements.
+
+## What Vigil protects against, and what it doesn't
+
+**Protects against:**
+
+- Claude invoking destructive commands (`rm -rf`, `sudo`, non-read-only `git`) without explicit consent.
+- Subprocess attacks via deny-listed runtimes (`python`, `node`, `npx`) and network tools (`curl`, `wget`, `ssh`, `scp`, `rsync`).
+- Credential exfiltration via read paths (`~/.ssh/`, `~/.aws/`, etc.) — at the sandbox layer on Linux, at the permission layer elsewhere.
+- Loss of audit trail: every session is transcribed and retained under a configurable retention policy.
+- Silent install drift: the copy-based install discipline forces every change through a reviewable install step rather than live-patching the running config.
+
+**Does not protect against:**
+
+- Prompt injection steering Claude's *reasoning* toward a harmful-but-schema-valid output. The sandbox constrains actions, not thoughts.
+- Semantic manipulation via attacker-controlled inputs that Claude reads (file content, tool output, pulled web pages).
+- A user who explicitly authorizes a risky action at the permission prompt.
+- Compromised Claude Code binaries or Anthropic-side model behavior.
+- Render-layer attacks (terminal escape sequences, trust-UI spoofing) in session transcripts.
+
+See [`THREAT_MODEL.md`](THREAT_MODEL.md) for the detailed enumeration per layer and the honest concessions where mitigations are soft.
+
+## Quickstart
+
+Clone anywhere, then run the installer:
 
 ```
-git clone <this-repo> ~/code/claude-config
-cd ~/code/claude-config
+git clone https://github.com/Logopher/Vigil.git ~/code/vigil
+cd ~/code/vigil
 ./install.sh
 ```
 
-The installer copies into two locations:
+The installer copies to two locations:
 
-- `~/.claude/` — the default profile (real directory; shared with Claude Code's runtime state).
-- `~/.config/claude-config/` — the shell alias, the policy files, and a convenience symlink to the default profile.
+- `~/.claude/` — the default profile. This is a real directory shared with Claude Code's runtime state (credentials, sessions, history); the name is external, not Vigil-specific.
+- `~/.config/vigil/` — the shell alias, the policy files, and a convenience symlink to the default profile.
 
-The installer **refuses to run if any destination already exists**, including a prior `~/.claude`, any existing alias or policy file, or a prior `profiles/default`. There is no `--force` flag. Re-installation requires manual cleanup first — this is intentional, because `~/.claude` may contain Claude Code runtime state (credentials, sessions, history) that the installer will not preserve for you.
-
-Add to your `~/.bashrc` (or equivalent) so the `claude`, `claude-dev`, `claude-strict`, `claude-yolo`, and `claude-log` wrapper functions are defined and sessions are recorded under `~/claude-logs/`:
+Add to your `~/.bashrc` (or equivalent):
 
 ```
-[ -f ~/.config/claude-config/claude-aliases.sh ] && source ~/.config/claude-config/claude-aliases.sh
+[ -f ~/.config/vigil/vigil-aliases.sh ] && source ~/.config/vigil/vigil-aliases.sh
 ```
+
+This defines the `vigil`, `vigil-dev`, `vigil-strict`, `vigil-yolo`, `vigil-log`, and `vigil-log-prune` wrappers, and ensures sessions are recorded under `~/vigil-logs/`.
+
+Run `./doctor.sh` at any point to check platform support, detect missing dependencies, and verify install integrity.
+
+## Profiles and policies
+
+The **default profile** is safe by construction: plan mode, the hard deny list, hooks, and sandbox rules. It lives at `~/.claude/` and applies to any Claude Code session started under Vigil.
+
+**Policies** are permission overlays selected per session via `--settings`. Shell wrappers save the typing:
+
+| Wrapper | Equivalent | Notes |
+|---|---|---|
+| `vigil` | bare `claude` | default profile baseline; plan mode; session logging via `script(1)` |
+| `vigil-dev` | `claude --settings .../policies/dev.json` | `cd` to git root; uninterrupted dev work; safety gates on risky ops |
+| `vigil-strict` | `claude --settings .../policies/strict.json` | same as the default profile baseline, made explicit |
+| `vigil-yolo` | `claude --settings .../policies/yolo.json` | bypasses confirmations; retains `rm` and `sudo` denies |
+
+`vigil-log` opens a session transcript in `$PAGER`. With no arguments it shows the most recent session; `vigil-log -1` shows the previous one (`-2` the one before that); `vigil-log 20260413` (or `2026-04-13`) opens the most recent transcript matching that date prefix.
+
+`vigil-log-prune` deletes old session logs from `~/vigil-logs/`. A `SessionStart` hook runs the same pruner automatically with defaults of 90 days and 2 GB total. For manual pruning, pass custom thresholds: `vigil-log-prune --older-than 30d --dry-run`.
 
 ## Updating
 
-Repo edits do not change session behavior until the installer runs. To refresh an existing install:
+Repo edits do not change session behavior until the installer runs. To refresh:
 
 ```
-cd ~/code/claude-config
-git pull            # or make local edits
-./update.sh         # interactive; pass -y to skip the prompt
+cd ~/code/vigil
+git pull
+./update.sh        # interactive; pass -y to skip the prompt
 ```
 
-`update.sh` defers to `uninstall.sh` to remove only files placed by this repo, moves any surviving state (Claude Code runtime data — credentials, sessions, history, projects — and user additions like custom agents, hooks, or policies) into a tempdir, runs `install.sh` into the now-empty destinations, then restores the saved state with `cp -rn` so freshly installed files always win. On clean exit the tempdir is removed; on failure it is preserved and its path is printed.
+`update.sh` defers to `uninstall.sh` to remove only files placed by this repo, moves any surviving state (Claude Code runtime data and user additions like custom agents, hooks, or policies) into a tempdir, runs `install.sh` into the now-empty destinations, then restores the saved state with `cp -rn` so freshly installed files always win. On clean exit the tempdir is removed; on failure it is preserved and its path is printed.
 
-In-place edits to installed files (e.g., a locally modified `~/.config/claude-config/claude-aliases.sh`) are lost on update — the install is the source of truth.
+In-place edits to installed files (e.g., a locally modified `~/.config/vigil/vigil-aliases.sh`) are lost on update. The install is the source of truth; edit the repo, then update.
 
 ## Uninstalling
 
 ```
-cd ~/code/claude-config
-./uninstall.sh        # interactive; pass -y to skip the prompt
+cd ~/code/vigil
+./uninstall.sh     # interactive; pass -y to skip the prompt
 ```
 
-The script removes only files placed by `install.sh` and leaves Claude Code runtime state in `~/.claude/` (credentials, sessions, history, projects, etc.) intact. User-added files under `~/.claude/agents/` and `~/.claude/hooks/` are also preserved — only entries that originated from this repo are removed.
-
-## Profiles and policies
-
-- The **default profile** is safe by construction — plan mode, a hard deny list, hooks, and sandbox rules. It lives at `~/.claude/` and applies to any Claude Code session.
-- **Policies** are permission overlays selected per session via `--settings`. Shell wrappers in `claude-aliases.sh` save the typing:
-
-  | Wrapper | Equivalent | Notes |
-  |---|---|---|
-  | `claude` | bare `claude` | default profile baseline; plan mode; session logging via `script(1)` |
-  | `claude-dev` | `claude --settings .../policies/dev.json` | cd to git root, uninterrupted dev work, safety gates on risky ops |
-  | `claude-strict` | `claude --settings .../policies/strict.json` | same as the default profile baseline, made explicit |
-  | `claude-yolo` | `claude --settings .../policies/yolo.json` | bypasses confirmations; retains `rm` and `sudo` denies |
-
-- `claude-log` opens a session transcript in `$PAGER`. With no arguments it shows the most recent session; `claude-log -1` shows the previous one (`-2` the one before that, etc.); `claude-log 20260413` (or `2026-04-13`) opens the most recent transcript matching that date prefix.
-- `claude-log-prune` deletes old session logs from `~/claude-logs/`. A SessionStart hook runs the same pruner automatically with defaults of 90 days and 2G total. For manual pruning pass custom thresholds, e.g. `claude-log-prune --older-than 30d --dry-run`.
+Removes only files placed by `install.sh`. Claude Code runtime state in `~/.claude/` (credentials, sessions, history, projects) is preserved. User-added files under `~/.claude/agents/` and `~/.claude/hooks/` are also preserved — only entries that originated from Vigil are removed.
 
 ## Further reading
 
-- [`DESIGN.md`](DESIGN.md) — design choices and rationale.
-- [`THREAT_MODEL.md`](THREAT_MODEL.md) — what this tool protects against, what it does not.
-- [`COMPATIBILITY.md`](COMPATIBILITY.md) — per-platform support status.
-- [`AUDIENCE.md`](AUDIENCE.md) — who the tool is and is not for.
-- [`LIFECYCLE.md`](LIFECYCLE.md) — project stage framework.
+- [`DESIGN.md`](DESIGN.md) — architecture and rationale: the profile/policy split, the copy-based install discipline, the layered deny-list model, the deliberate rejection of plugins and runtime configuration protocols.
+- [`THREAT_MODEL.md`](THREAT_MODEL.md) — what Vigil protects against at each layer, what it explicitly does not, and the adversary models that are and aren't in scope.
+- [`COMPATIBILITY.md`](COMPATIBILITY.md) — per-platform support status and known gaps (Linux / WSL2 / macOS / native Windows).
+- [`AUDIENCE.md`](AUDIENCE.md) — the longer version of "who this is for," including common misconceptions and a self-check.
+- [`LIFECYCLE.md`](LIFECYCLE.md) — project stage framework. Vigil is pre-1.0; interfaces may change.
+- [`VIGIL_PLAN.md`](VIGIL_PLAN.md) — near-term roadmap, including the commit-review gate currently in design.
+- [`BACKLOG.md`](BACKLOG.md) — longer tail of ideas and deferred work.
+
+## License
+
+Vigil is released under the [MIT License](LICENSE).
+
+---
+
+*Vigil is a solo project. Responsiveness is best-effort; issues with reproducible steps land faster than discussion threads.*

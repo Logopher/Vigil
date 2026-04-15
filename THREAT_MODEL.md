@@ -121,6 +121,7 @@ An optional per-repo pre-push hook installed via `vigil-install-review <repo>`. 
 - An agent constructing a malicious PR body that includes exfiltrated data from the project, and the operator approving `gh pr create`. The `gh` CLI is not denied; its credential file is denied at read but `gh` itself may authenticate via another mechanism.
 - A prompt that convinces the operator to run `vigil-dev` on a directory containing credentials as project files.
 - An agent reading credential files via Claude Code's *in-process* Read tool. The sandbox's `denyRead` only applies to subprocesses (Bash); the Read/Write/Edit tools run in-process and bypass it. The permission layer's `Read(/home/.../.ssh/**)` denies are the only protection against this channel, and we have not been able to verify that they fire (Claude's training refuses such reads before the matcher engages — a third defense layer that, ironically, also blocks our test).
+- A prompt-injected agent writing to `~/.claude/projects/*/memory/**` via the in-process Write tool. Auto-memory is a deliberate persistence channel — entries saved in one session are read by future sessions. Two distinct residuals: (1) *same-project* poisoning, where writes to the current session's memory dir influence future sessions in the same project; this is inherent to the feature existing and cannot be closed without disabling auto-memory. (2) *Cross-project* poisoning, where writes target another project's memory dir; the permission matcher has no `$PROJECT_SLUG` substitution, so an in-process Write to any project's memory path is indistinguishable at the permission layer from a legitimate same-project write. The cross-project case is specifically harder to notice — poison sits in a rarely-visited project and ages until discovery there. A `PreToolUse` hook that resolves the calling session's project slug can close the cross-project case; it is tracked in `BACKLOG.md` and sequenced behind the per-tool-call logging hook, which validates the same architecture on a non-security-critical path first.
 - A `pre-commit`, `prepare-commit-msg`, `commit-msg`, or `post-commit` hook file, installed through any write channel the sandbox does not cover, executes outside the sandbox when `git commit` or `git tag` fires. The `excludedCommands` carve-out that enables signing also widens the blast radius of a hook-install + commit-trigger chain: the hook runs with the operator's shell-level filesystem and network reach, not the sandboxed subset.
 
 ## Residual risk
@@ -131,6 +132,7 @@ Using this tool in its default configuration, an attacker who achieves prompt in
 - Read any non-sensitive file within the current project.
 - Commit changes to the local git repository.
 - Invoke any allowed build/test tool (in `dev`) with arbitrary arguments.
+- Write to the current project's auto-memory, influencing future sessions in the same project. Cross-project memory writes are also reachable today; a scope-validation hook to close that case is tracked in `BACKLOG.md`.
 
 An attacker cannot plausibly (without further misconfiguration):
 

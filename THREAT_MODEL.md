@@ -66,6 +66,8 @@ This layer is load-bearing for prompt-injection and buggy-agent threats. Sandbox
 
 **Important scope limit:** the sandbox covers *subprocesses* — anything Claude executes via the Bash tool. Claude Code's own built-in tools (Read, Write, Edit, Glob, Grep) execute in-process and are **not** subject to sandbox `denyRead` or `allowedDomains`. They are governed only by the permission layer's `Read(...)`/`Write(...)`/`Edit(...)` rules. A complete defense for credential paths therefore needs both: permission-layer denies for the in-process tools, and sandbox denies for subprocess access.
 
+**`excludedCommands` carve-out.** Commands matched by `sandbox.excludedCommands` run outside the sandbox entirely — neither they nor their subprocesses inherit bubblewrap. The default profile carves out `git commit *` and `git tag *` so they can reach the host `ssh-agent` for signing; the `allowUnixSockets` path is unimplemented on Linux bubblewrap (tracked upstream as `anthropics/claude-code#44180`; see `BACKLOG.md` → *Concluded investigations*). A carved-out command's hook subprocesses — `pre-commit`, `prepare-commit-msg`, `commit-msg`, `post-commit` — therefore execute with host-level filesystem and network access, not sandbox-confined access. Hook *file installation* remains sandbox-blocked (`denyWrite` on `.git/hooks/`) against subprocess writes, but a hook installed through another channel (notably the in-process Write tool, if not denied at the permission layer) runs outside bubblewrap the next time `git commit` or `git tag` fires.
+
 ### Claude Code built-ins
 
 Always-on protections for `.git/` (non-claude subfolders), `.gitconfig`, shell RC files, `.mcp.json`, and specific `.claude/` entries. Not configurable from this tool; documented here because they're part of the operative defense.
@@ -119,6 +121,7 @@ An optional per-repo pre-push hook installed via `vigil-install-review <repo>`. 
 - An agent constructing a malicious PR body that includes exfiltrated data from the project, and the operator approving `gh pr create`. The `gh` CLI is not denied; its credential file is denied at read but `gh` itself may authenticate via another mechanism.
 - A prompt that convinces the operator to run `vigil-dev` on a directory containing credentials as project files.
 - An agent reading credential files via Claude Code's *in-process* Read tool. The sandbox's `denyRead` only applies to subprocesses (Bash); the Read/Write/Edit tools run in-process and bypass it. The permission layer's `Read(/home/.../.ssh/**)` denies are the only protection against this channel, and we have not been able to verify that they fire (Claude's training refuses such reads before the matcher engages — a third defense layer that, ironically, also blocks our test).
+- A `pre-commit`, `prepare-commit-msg`, `commit-msg`, or `post-commit` hook file, installed through any write channel the sandbox does not cover, executes outside the sandbox when `git commit` or `git tag` fires. The `excludedCommands` carve-out that enables signing also widens the blast radius of a hook-install + commit-trigger chain: the hook runs with the operator's shell-level filesystem and network reach, not the sandboxed subset.
 
 ## Residual risk
 

@@ -72,7 +72,12 @@ for src in "$REPO_DIR/policies/"*; do
 done
 
 for src in "$REPO_DIR/scripts/"*; do
+    [[ -d "$src" ]] && continue
     add_if_exists "$DEST_DIR/scripts/$(basename "$src")"
+done
+for src in "$REPO_DIR/scripts/hooks/"*; do
+    [[ -d "$src" ]] && continue
+    add_if_exists "$DEST_DIR/scripts/hooks/$(basename "$src")"
 done
 
 add_if_exists "$DEST_DIR/profiles/default"
@@ -125,7 +130,7 @@ done
 # dirs, so user additions and runtime state are preserved automatically.
 # Subdirs under profiles/default/ are derived from the repo so new ones
 # (e.g., commands/) are picked up without editing this script.
-empty_dirs=("$DEST_DIR/policies" "$DEST_DIR/scripts" "$DEST_DIR/profiles")
+empty_dirs=("$DEST_DIR/policies" "$DEST_DIR/scripts/hooks" "$DEST_DIR/scripts" "$DEST_DIR/profiles")
 for src in "$REPO_DIR/profiles/default/"*; do
     [[ -d "$src" ]] && empty_dirs+=("$CLAUDE_DIR/$(basename "$src")")
 done

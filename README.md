@@ -104,9 +104,9 @@ git pull
 ./update.sh        # interactive; pass -y to skip the prompt
 ```
 
-`update.sh` defers to `uninstall.sh` to remove only files placed by this repo, moves any surviving state (Claude Code runtime data and user additions like custom agents, hooks, or policies) into a tempdir, runs `install.sh` into the now-empty destinations, then restores the saved state with `cp -rn` so freshly installed files always win. On clean exit the tempdir is removed; on failure it is preserved and its path is printed.
+`update.sh` defers to `uninstall.sh` to remove only files placed by this repo, moves any surviving state (Claude Code runtime data and user additions like custom agents, hooks, or policies) into a tempdir, runs `install.sh` into the now-empty destinations, then restores the saved state with `cp -rn` — so for any path that appears in both the saved state and the fresh install, the fresh install wins. On clean exit the tempdir is removed; on failure it is preserved and its path is printed.
 
-In-place edits to installed files (e.g., a locally modified `~/.config/vigil/vigil-aliases.sh`) are lost on update. The install is the source of truth; edit the repo, then update.
+**Caveat: local edits to installed files are destroyed on update.** If you hand-edit `~/.config/vigil/vigil-aliases.sh`, a policy file, or any other file that the installer also places, your edit is silently overwritten by the next `update.sh` run. The workaround today is to make the edit in the repo instead and update — the install is the source of truth. This is a known limitation, not the intended long-term behavior; a manifest-based change-detection scheme that preserves divergent local edits is tracked in `BACKLOG.md` under "`update.sh` change-detection via install manifest."
 
 ## Uninstalling
 

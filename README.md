@@ -121,6 +121,8 @@ Removes only files placed by `install.sh`. Claude Code runtime state in `~/.clau
 
 **Support.** Best-effort, no SLA. Issues are read and triaged as time allows; responsiveness is not guaranteed. Reports with reproducible steps land faster than open-ended discussion.
 
+**Security.** Private vulnerability reporting is enabled on this repository — use the **Report a vulnerability** button on the [Security tab](https://github.com/Logopher/Vigil/security) for anything you'd rather not disclose publicly. See [`SECURITY.md`](SECURITY.md) for scope, response expectations, and stage-level caveats.
+
 **Contributions.** Pull requests are not being accepted at this stage — please open an issue instead. See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the rationale and what to do instead.
 
 **Telemetry.** Vigil does not collect telemetry today, and will never collect telemetry on an opt-out basis. If telemetry is ever added, it will be strictly opt-in, disabled by default, and the exact payload will be documented in this repo before the feature ships. A tool whose entire purpose is constraining what code agents do on your machine cannot defensibly phone home without your consent.

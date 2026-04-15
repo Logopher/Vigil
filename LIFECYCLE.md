@@ -1,6 +1,6 @@
 # LIFECYCLE.md
 
-**Current stage: 0, preparing for 1.**
+**Current stage: 1.**
 
 This document describes the stages Vigil is expected to pass through over its life, what each stage demands of the maintainer, and the transitions between them. It is the whole-arc view. For how the project works today, see `DESIGN.md`.
 

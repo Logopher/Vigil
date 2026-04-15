@@ -99,12 +99,21 @@ cp "$REPO_DIR/doctor.sh" "$DEST_DIR/doctor.sh"
 chmod +x "$DEST_DIR/doctor.sh"
 
 # Management scripts the user can invoke later (e.g., after installing
-# a tool that creates new credential paths they want denied).
+# a tool that creates new credential paths they want denied). The
+# `hooks/` subdirectory ships git-hook templates consumed by Phase D's
+# vigil-install-review; they are not auto-installed into any repo.
+mkdir -p "$DEST_DIR/scripts/hooks"
 for src in "$REPO_DIR/scripts/"*; do
+    [[ -d "$src" ]] && continue
     cp "$src" "$DEST_DIR/scripts/"
+done
+for src in "$REPO_DIR/scripts/hooks/"*; do
+    [[ -d "$src" ]] && continue
+    cp "$src" "$DEST_DIR/scripts/hooks/"
 done
 chmod +x "$DEST_DIR/scripts/"*.py 2>/dev/null || true
 chmod +x "$DEST_DIR/scripts/"*.sh 2>/dev/null || true
+chmod +x "$DEST_DIR/scripts/hooks/"* 2>/dev/null || true
 
 for src in "$REPO_DIR/policies/"*; do
     fname="$(basename "$src")"

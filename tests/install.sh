@@ -77,6 +77,13 @@ check_file "profile settings.json at ~/.claude"     "$home/.claude/settings.json
 check_file "profile CLAUDE.md at ~/.claude"         "$home/.claude/CLAUDE.md"
 check_file "scripts/filter-sandbox-denies.py installed" \
     "$home/.config/vigil/scripts/filter-sandbox-denies.py"
+check_file "scripts/hooks/prepare-commit-msg installed" \
+    "$home/.config/vigil/scripts/hooks/prepare-commit-msg"
+if [[ -x "$home/.config/vigil/scripts/hooks/prepare-commit-msg" ]]; then
+    pass "prepare-commit-msg hook is executable"
+else
+    fail "prepare-commit-msg hook should be executable"
+fi
 
 # Template source files should NOT appear in the install.
 if [[ -f "$home/.config/vigil/policies/dev.template.json" ]]; then

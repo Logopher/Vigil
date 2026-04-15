@@ -1,0 +1,37 @@
+#!/bin/sh
+# Vigil prepare-commit-msg template. Stamps a `Vigil-Session: <id>` trailer
+# when run inside a Vigil session so vigil-review can later resolve the
+# commit back to its ~/vigil-logs transcript. Safe outside Vigil sessions:
+# silent no-op when VIGIL_SESSION_ID is unset, malformed, or the commit
+# source is one we shouldn't pollute (merge, squash).
+#
+# Distributed by `vigil-install-review` (Phase D) into a target repo's
+# `.git/review-gate/`; never copied into the Vigil repo itself.
+set -eu
+
+msg_file=${1:-}
+source=${2:-}
+
+# Hook protocol guarantees $1 but defends against an exotic invocation.
+[ -n "$msg_file" ] || exit 0
+
+# Aggregate / machine-assembled messages don't carry session provenance.
+case "$source" in
+    merge|squash) exit 0 ;;
+esac
+
+# Unset or empty: not in a Vigil session. Common path; stay invisible.
+[ -n "${VIGIL_SESSION_ID:-}" ] || exit 0
+
+# Validate against the format vigil-aliases.sh mints (date +%Y%m%d-%H%M%S).
+# Anything else may be attacker-controlled; reject silently rather than
+# write a value that vigil-review would later resolve to a filesystem path.
+case "$VIGIL_SESSION_ID" in
+    [0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]-[0-9][0-9][0-9][0-9][0-9][0-9]) ;;
+    *) exit 0 ;;
+esac
+
+git interpret-trailers \
+    --if-exists addIfDifferent \
+    --trailer "Vigil-Session: $VIGIL_SESSION_ID" \
+    --in-place "$msg_file"

@@ -10,7 +10,7 @@ Repo layout:
 
 - `profiles/<name>/` — per-profile bundle: `settings.template.json`, `CLAUDE.md`, `hooks/*.sh`. The default profile is strict-by-construction.
 - `policies/<name>.json` — permission overlays invoked per session via `claude --settings ~/.config/vigil/policies/<name>.json`. Current set: `strict`, `dev`, `yolo`.
-- `vigil-aliases.sh` — sourced from `~/.bashrc` (from the installed copy at `~/.config/vigil/vigil-aliases.sh`); wraps the `claude` CLI with `script(1)` and exposes `vigil`, `vigil-dev`, `vigil-strict`, `vigil-yolo`, and `vigil-log*` entry points. Session transcripts land under `~/vigil-logs/session-<timestamp>.log`.
+- `vigil-aliases.sh` — sourced from `~/.bashrc` (from the installed copy at `~/.config/vigil/vigil-aliases.sh`); wraps the `claude` CLI with `script(1)` and exposes `vigil`, `vigil-dev`, `vigil-strict`, `vigil-yolo`, and `vigil-log*` entry points. Session transcripts land under `~/vigil-logs/` as a pair per session: `session-<timestamp>.log` is the raw `script(1)` TTY capture (full fidelity, for replay), and `session-<timestamp>.txt` is the ANSI-stripped readable companion produced by `scripts/strip-ansi.py` (what `vigil-log` and `vigil-review` read).
 - `install.sh` — copy-based installer; refuses to run if any destination node already exists.
 
 ## Architecture

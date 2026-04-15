@@ -48,7 +48,6 @@ These widen appeal to less-technical users without compromising the security mod
 - **Bash/zsh/fish completion for `claude --settings`.** Multi-shell completion is a project of its own; not low-hanging despite appearances.
 - **Session log rotation / indexing as a structured query layer.** Logs interleave `script(1)` raw bytes with JSON hook output; structured queryability needs a parser. (Simple time-based pruning is in "Next-session candidates" above; structured indexing is a separate, larger effort.)
 - **Per-tool deny patterns for "dangerous bash one-liners"** (`rm -rf /`, fork bombs). Pattern-matching theater — bypassed by a one-character change.
-- **GUI / IDE integration.** Outside scope; the kind of user who needs a GUI is probably not the target audience even after widening.
 - **Wizard-driven policy customization.** Encourages editing without understanding, which is exactly what the security framing tries to prevent. The strict/dev/yolo split is the wizard.
 - **Pre-built role profiles** (data scientist, web dev, homelab admin). High maintenance burden, value uncertain, risks creating a sprawl of profiles each tied to a specific stack.
 - **Distribution via Brew / APT / package managers.** Real distribution work; premature for current stage.
@@ -56,4 +55,4 @@ These widen appeal to less-technical users without compromising the security mod
 
 ## Maintenance
 
-When acting on an item, remove it from this file in the same commit (or note its disposition). When considering an item not worth pursuing, remove it with a brief reason in the commit message. The file should shrink as easily as it grows. Re-triage and update the "Last triaged" date when you next return to this file.
+When acting on an item, remove it from this file in the same commit (or note its disposition). When rejecting an item, decide whether it's worth preserving as a "why not X?" answer: ideas likely to be re-proposed (because they look obvious from outside) belong in *Considered and not pursued* with a single-sentence rationale — no investigation history, that lives in git. One-off triage decisions that won't be re-proposed stay in commit messages only. The file should shrink as easily as it grows. Re-triage and update the "Last triaged" date when you next return to this file.

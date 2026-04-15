@@ -71,7 +71,7 @@ if [[ ! -d "$DEST_DIR/policies" ]]; then
     report FAIL "$(display_path "$DEST_DIR/policies") directory missing"
 else
     policy_count=0
-    for p in "$DEST_DIR/policies/"*.json; do
+    for _ in "$DEST_DIR/policies/"*.json; do
         policy_count=$((policy_count + 1))
     done
     if [[ $policy_count -gt 0 ]]; then
@@ -159,7 +159,6 @@ fi
 # -----------------------------------------------------------------------------
 section "Shell rc sources vigil-aliases.sh"
 
-aliases_path="$DEST_DIR/vigil-aliases.sh"
 sourced_in=()
 for rc in "$HOME/.bashrc" "$HOME/.bash_profile" "$HOME/.zshrc" "$HOME/.profile"; do
     if [[ -f "$rc" ]] && grep -q "vigil-aliases.sh" "$rc" 2>/dev/null; then

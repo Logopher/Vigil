@@ -1,3 +1,4 @@
+# shellcheck shell=bash
 # Curated env-var allowlist for the vigil wrappers. Vars not on this
 # list (and not matching LC_* or GIT_*) are unset before launching
 # Claude — the default sandbox covers filesystem reads but env vars
@@ -47,7 +48,8 @@ _vigil_run_with_logging() (
         unset "$_vigil_v" 2>/dev/null || true
     done < <(compgen -v)
 
-    export VIGIL_SESSION_ID=$(date +%Y%m%d-%H%M%S)
+    VIGIL_SESSION_ID=$(date +%Y%m%d-%H%M%S)
+    export VIGIL_SESSION_ID
     export VIGIL_LOG_DIR="$HOME/vigil-logs"
     mkdir -p "$VIGIL_LOG_DIR"
     local logfile="$VIGIL_LOG_DIR/session-$VIGIL_SESSION_ID.log"

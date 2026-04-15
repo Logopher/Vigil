@@ -134,7 +134,6 @@ Removes only files placed by `install.sh`. Claude Code runtime state in `~/.clau
 - [`COMPATIBILITY.md`](COMPATIBILITY.md) — per-platform support status and known gaps (Linux / WSL2 / macOS / native Windows).
 - [`AUDIENCE.md`](AUDIENCE.md) — the longer version of "who this is for," including common misconceptions and a self-check.
 - [`LIFECYCLE.md`](LIFECYCLE.md) — project stage framework. Vigil is pre-1.0; interfaces may change.
-- [`VIGIL_PLAN.md`](VIGIL_PLAN.md) — near-term roadmap, including the commit-review gate currently in design.
 - [Commit-review gate](THREAT_MODEL.md#commit-review-gate-opt-in) — scope and limits of the opt-in pre-push gate.
 - [`BACKLOG.md`](BACKLOG.md) — longer tail of ideas and deferred work.
 

@@ -26,10 +26,10 @@ Hooks registered in the default profile:
 
 - `SessionStart` / `SessionEnd` → `hooks/prune-worktrees.sh`
 - `SessionStart` → `hooks/prune-logs.sh` (retention for `~/vigil-logs/`; defaults 90d age, 2G cap)
-- `PreToolUse` → `hooks/log-tool-use.sh` (appends JSON payload to the session log)
-- `PostToolUse` → `hooks/log-tool-result.sh`
 
-Hook paths in the template use the `{{PROFILE_DIR}}` placeholder; the installer substitutes the installed profile directory when generating `settings.json`. The logging hooks rely on `VIGIL_SESSION_ID` and `VIGIL_LOG_DIR` exported by `vigil-aliases.sh` — if Claude is launched without that wrapper sourced, the hooks write to an undefined path.
+Hook paths in the template use the `{{PROFILE_DIR}}` placeholder; the installer substitutes the installed profile directory when generating `settings.json`.
+
+Per-tool-call logging hooks (`PreToolUse` / `PostToolUse`) previously existed but were removed after proving unreliable. Reintroducing a working version is tracked in `BACKLOG.md`. Session-level transcripts are still captured via `script(1)` from the shell wrappers in `vigil-aliases.sh`.
 
 The sandbox `denyRead` and `denyWrite` lists are *not* defined in `settings.template.json`. Their authoritative source is the master tuples (`MASTER_DENY_READ`, `MASTER_DENY_WRITE`) at the top of `scripts/filter-sandbox-denies.py`. The installer invokes that script after writing `settings.json`; the script overwrites the two arrays with the master entries that currently pass bubblewrap's mount-target type check. To change the desired deny set, edit the Python source — not the JSON template. The script is safe to re-run standalone (e.g., after installing a new CLI that creates `~/.aws/`) to refresh the lists without a full reinstall.
 

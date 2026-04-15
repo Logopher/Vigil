@@ -69,8 +69,10 @@ check_absent "doctor.sh"           "$home/.config/vigil/doctor.sh"
 check_absent "policies/dev.json"   "$home/.config/vigil/policies/dev.json"
 check_absent "policies/strict.json" "$home/.config/vigil/policies/strict.json"
 check_absent "policies/yolo.json"  "$home/.config/vigil/policies/yolo.json"
-check_absent "scripts/filter-sandbox-denies.py" \
-    "$home/.config/vigil/scripts/filter-sandbox-denies.py"
+while IFS= read -r -d '' f; do
+    rel="${f#"$REPO_DIR/scripts/"}"
+    check_absent "scripts/$rel" "$home/.config/vigil/scripts/$rel"
+done < <(find "$REPO_DIR/scripts" -type f -print0)
 check_absent "profiles/default symlink" "$home/.config/vigil/profiles/default"
 check_absent "settings.json"       "$home/.claude/settings.json"
 check_absent "CLAUDE.md"           "$home/.claude/CLAUDE.md"

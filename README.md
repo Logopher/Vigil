@@ -117,6 +117,16 @@ cd ~/code/vigil
 
 Removes only files placed by `install.sh`. Claude Code runtime state in `~/.claude/` (credentials, sessions, history, projects) is preserved. User-added files under `~/.claude/agents/` and `~/.claude/hooks/` are also preserved — only entries that originated from Vigil are removed.
 
+## Project posture
+
+**Support.** Best-effort, no SLA. Issues are read and triaged as time allows; responsiveness is not guaranteed. Reports with reproducible steps land faster than open-ended discussion.
+
+**Contributions.** Pull requests are not being accepted at this stage — please open an issue instead. See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the rationale and what to do instead.
+
+**Telemetry.** Vigil does not collect telemetry today, and will never collect telemetry on an opt-out basis. If telemetry is ever added, it will be strictly opt-in, disabled by default, and the exact payload will be documented in this repo before the feature ships. A tool whose entire purpose is constraining what code agents do on your machine cannot defensibly phone home without your consent.
+
+**Stage.** Vigil is at Stage 1 of the lifecycle in [`LIFECYCLE.md`](LIFECYCLE.md) — shareable with trusted friends, pre-stranger. Interfaces may change.
+
 ## Further reading
 
 - [`DESIGN.md`](DESIGN.md) — architecture and rationale: the profile/policy split, the copy-based install discipline, the layered deny-list model, the deliberate rejection of plugins and runtime configuration protocols.
@@ -131,7 +141,3 @@ Removes only files placed by `install.sh`. Claude Code runtime state in `~/.clau
 ## License
 
 Vigil is released under the [MIT License](LICENSE).
-
----
-
-*Vigil is a solo project. Responsiveness is best-effort; issues with reproducible steps land faster than discussion threads.*

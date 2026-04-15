@@ -6,10 +6,10 @@
     "allowUnsandboxedCommands": false,
     "enableWeakerNestedSandbox": false,
     "enableWeakerNetworkIsolation": false,
+    "excludedCommands": ["git commit *", "git tag *"],
     "filesystem": {},
     "network": {
       "allowedDomains": [],
-      "allowUnixSockets": ["/tmp/claude/vigil-signing.sock"],
       "allowAllUnixSockets": false,
       "allowLocalBinding": false
     }

@@ -41,6 +41,7 @@ These widen appeal to less-technical users without compromising the security mod
 - **Better install.sh error messages.** When bwrap fails, when `python3` is missing, when a path conflict is found — point at `vigil doctor` (once it exists) and a one-line "run X to diagnose." Avoids stranding users at cryptic Linux errors.
 - **A "casual" preset profile.** Not strict, not yolo, not dev — tuned for "personal laptop, not handling production data, wants safety but minimal friction." Could become the default for new installs, with `strict` promoted to "for production / shared / sensitive machines." Lowers the floor for users who aren't ready to think about the strict/dev/yolo trade-off.
 - **Auto-update mechanism.** `vigil update` fetches latest, runs the update flow that `update.sh` automates. Needs versioning first. Removes manual `git pull` cycle.
+- **CI mirror of the local review gate.** Today `architect` and `code-reviewer` agents run pre-commit on the maintainer's machine; the review trail is invisible to a visitor scrolling the repo. Mirror the gate in GitHub Actions so pushes to `main` (and, once PRs open up, PRs) trigger the same checks and block on findings. Turns the "direct-to-main with no visible review" signal into "direct-to-main with an enforced CI gate." Depends on the agents being runnable headless in CI; may need a harness shim.
 
 ## Considered and not pursued
 

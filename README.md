@@ -125,6 +125,8 @@ Removes only files placed by `install.sh`. Claude Code runtime state in `~/.clau
 
 **Contributions.** Pull requests are not being accepted at this stage — please open an issue instead. See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the rationale and what to do instead.
 
+**Review discipline.** Commits land directly on `main` (solo maintainer, no PR workflow yet), but non-trivial changes go through an `architect` planning pass and a `code-reviewer` review pass before the commit is made. Agent definitions live in `.claude/agents/`. A CI mirror of the review gate — running the same checks against pushes and blocking on findings — is planned for a later stage and tracked in [`BACKLOG.md`](BACKLOG.md).
+
 **Telemetry.** Vigil does not collect telemetry today, and will never collect telemetry on an opt-out basis. If telemetry is ever added, it will be strictly opt-in, disabled by default, and the exact payload will be documented in this repo before the feature ships. A tool whose entire purpose is constraining what code agents do on your machine cannot defensibly phone home without your consent.
 
 **Stage.** Vigil is at Stage 1 of the lifecycle in [`LIFECYCLE.md`](LIFECYCLE.md) — shareable with trusted friends, pre-stranger. Interfaces may change.

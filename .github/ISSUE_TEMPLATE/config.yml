@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/Logopher/Vigil/security/advisories/new
+    about: Report a security issue privately via GitHub's private vulnerability reporting. Do not file vulnerabilities as public issues. See SECURITY.md for scope and response expectations.
+  - name: Contributing and posture
+    url: https://github.com/Logopher/Vigil/blob/main/CONTRIBUTING.md
+    about: PRs are not accepted at this stage. See CONTRIBUTING.md for what to do instead and for the maintainer's posture on issues.

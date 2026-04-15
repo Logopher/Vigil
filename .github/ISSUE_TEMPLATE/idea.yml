@@ -1,0 +1,37 @@
+name: Idea or feature request
+description: Suggest a feature, policy, or change. Ideas are welcomed as issues; PRs are not accepted at this stage.
+labels:
+  - idea
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Ideas are welcomed. CONTRIBUTING.md explains why PRs are closed for now — please do not open one even if this idea is small; it will be closed unmerged. Describing the use case is more valuable than proposing the implementation.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem is this solving?
+      description: Describe the use case or the friction you hit. Concrete scenarios land better than abstract wishes.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed direction (optional)
+      description: If you have a specific change in mind, sketch it here. Optional — a clearly stated problem is often enough.
+    validations:
+      required: false
+  - type: textarea
+    id: scope-check
+    attributes:
+      label: Does this fit Vigil's scope?
+      description: See README.md ("Who Vigil is for") and LIFECYCLE.md (current stage and anti-goals). Ideas that widen scope beyond the stated audience are legitimate to file but more likely to be declined.
+    validations:
+      required: false
+  - type: textarea
+    id: threat-model
+    attributes:
+      label: Security implications (if any)
+      description: If this change touches the sandbox, deny lists, hooks, or install discipline, note what it changes about the threat surface. See THREAT_MODEL.md.
+    validations:
+      required: false

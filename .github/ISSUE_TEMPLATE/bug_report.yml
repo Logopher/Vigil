@@ -1,0 +1,56 @@
+name: Bug report
+description: Something Vigil does, or fails to do, that you believe is wrong.
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. Reproducible steps land faster than open-ended descriptions. If you believe this is a security vulnerability, use [private vulnerability reporting](https://github.com/Logopher/Vigil/security/advisories/new) instead.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: One or two sentences describing what went wrong.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction
+      description: The exact steps you ran, ideally against a clean install. Include the commands you invoked (`vigil`, `vigil-dev`, `./install.sh`, etc.) and what you expected to happen.
+      placeholder: |
+        1. git clone https://github.com/Logopher/Vigil.git ~/code/vigil
+        2. cd ~/code/vigil && ./install.sh
+        3. Started a new shell, ran `vigil-dev`
+        4. Expected X, got Y.
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: What actually happened
+      description: Paste relevant output. If `./doctor.sh` produced anything useful, include its output too.
+    validations:
+      required: true
+  - type: input
+    id: platform
+    attributes:
+      label: Platform
+      description: OS and version (e.g., Ubuntu 24.04, WSL2 on Windows 11, macOS 14.5). See COMPATIBILITY.md for what's supported.
+    validations:
+      required: true
+  - type: input
+    id: vigil-commit
+    attributes:
+      label: Vigil commit or version
+      description: Output of `git -C ~/code/vigil rev-parse --short HEAD` or the release tag if you installed from a release.
+    validations:
+      required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: Anything else
+      description: Workarounds you tried, related issues, context that might matter.
+    validations:
+      required: false

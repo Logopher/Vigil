@@ -36,3 +36,19 @@ Angular-style conventional commits.
 ### Review gates
 
 Non-trivial changes go through an `architect` planning pass and a `code-reviewer` pass before commit. See `.claude/agents/` for the agent definitions. Small single-file fixes may skip the architect pass.
+
+### Public surface (semver classification)
+
+`release-please` derives version bumps from conventional-commit types: `feat` bumps patch pre-1.0, `fix` bumps patch, `feat!` or a `BREAKING CHANGE:` footer bumps minor pre-1.0. The classifier (the commit author) needs a bright line for what counts as a breaking change. A commit is breaking when it changes any of the following:
+
+1. **Installed path layout** — contents of `~/.claude/` placed by Vigil, the `~/.config/vigil/` tree, or the `~/vigil-logs/` filename format (`session-YYYYMMDD-HHMMSS.{log,txt}`).
+2. **Shell wrapper names and argument shapes** — `vigil`, `vigil-dev`, `vigil-strict`, `vigil-yolo`, `vigil-log`, `vigil-log-prune`, `vigil-install-review`. Adding a wrapper is `feat`; renaming or removing one is breaking.
+3. **Policy names** — `strict`, `dev`, `yolo`. Renaming or removing is breaking; tightening allow-lists inside a policy is `feat`; adding a new policy is `feat`.
+4. **Default profile deny baseline** — *loosening* the baseline deny list is breaking (users rely on it for safety). Tightening or adding new denies is `feat`; removing a deny is breaking.
+5. **Hook contract** — the `{{PROFILE_DIR}}` substitution, the `VIGIL_SESSION_ID` / `VIGIL_LOG_DIR` environment contract, and the `SessionStart` / `PreToolUse` / `PostToolUse` wiring names documented in `CLAUDE.md`.
+6. **Installer contracts** — `install.sh`, `update.sh`, and `uninstall.sh` CLI flags; the refuse-to-clobber behavior; which files each script touches.
+7. **Commit-review gate** — `vigil-install-review`, the `.git/review-gate/` layout in consuming repos, and the pre-push hook's SHA-256 manifest check.
+
+*Not* public surface (changes here are never breaking): internal script names under `scripts/`, hook-script filenames inside a profile's `hooks/` directory, exact wording of prompts or error messages, log-line formats excluding the filename format above, and any variable name that isn't in the list above.
+
+When unsure, err toward `feat!` rather than `feat`. An over-classified bump is cosmetic; an under-classified one silently breaks friends at Stage 1 and strangers at Stage 2.

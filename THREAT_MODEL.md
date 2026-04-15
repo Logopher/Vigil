@@ -99,11 +99,21 @@ An optional per-repo pre-push hook installed via `vigil-install-review <repo>`. 
 
 **When to use something stronger.** For stakes where silent bypass is unacceptable, server-side branch protection is the correct enforcement layer. Vigil's gate is a visibility aid for the operator's own host; it does not substitute for server-side rules.
 
-### Out of scope
+### Not currently covered
 
-- **Commit review.** See [Commit-review gate (opt-in)](#commit-review-gate-opt-in) above — Vigil now ships an opt-in gate; it is a visibility aid, not a guarantee.
+Directions this tool could reasonably grow into but doesn't today. See `BACKLOG.md` for current disposition.
+
+- **Container- or VM-grade isolation.** The sandbox is bubblewrap/Seatbelt configuration, not a full namespace + cgroup + read-only-root container or a VM. A stronger runtime is plausible future work; today's posture trades isolation strength for ergonomic use of the operator's real `$HOME`.
+- **Cloud / remote-agent environments.** The design assumes a single-user laptop. The env-scrub layer, session-log location, commit-review gate's pre-push assumption, and `{{HOME}}`/`{{CWD}}` substitutions would all need rethinking for cloud-hosted deployment.
+
+### Not anticipated
+
+Things this tool does not try to be and is unlikely to grow into.
+
+- **Commit review as cryptographic guarantee.** See [Commit-review gate (opt-in)](#commit-review-gate-opt-in) above — Vigil ships an opt-in gate, but it is a visibility aid on the operator's own host, not a guarantee. Server-side branch protection is the correct enforcement layer for stakes where silent bypass is unacceptable.
 - **Social engineering.** The tool cannot protect against an operator who is manipulated into approving malicious actions or elevating to `yolo` for an attack surface.
 - **Network-level MITM, supply chain, OS compromise, hardware attacks.** Out of scope entirely.
+- **Enterprise features.** Centralized policy distribution, audit aggregation, compliance reporting, MDM integration. Vigil targets single-developer local-machine use; the enterprise layer is a different product category with different buyers.
 
 ## What this stops (concrete examples)
 

@@ -58,6 +58,8 @@ This layer is for *clarity of intent*, not *guarantee of prevention*.
 
 Process-level OS isolation (Seatbelt on macOS, bubblewrap on Linux/WSL2). **Catches:** any subprocess attempt to read denied paths, write outside allowed paths, or open network connections to non-allowlisted domains. Inherited by all child processes.
 
+*Mechanism reference:* Claude Code's [sandboxing documentation](https://code.claude.com/docs/en/sandboxing) describes the OS-level enforcement primitives and the proxy-based network-isolation model that this layer configures.
+
 This layer is load-bearing for prompt-injection and buggy-agent threats. Sandbox failures are real security failures; string-match permission failures are UX inconveniences.
 
 **Git metadata protection.** `denyWrite` covers `~/.gitconfig`, the active repo's `.git/config`, and `.git/hooks/` — closing the subprocess-write gap left by the in-process-only built-in protections listed below. A Bash-tool `echo … >> .git/config` or `git config --local core.hooksPath /tmp/evil` is blocked at the sandbox layer. Scope limits: the active-repo entries resolve against the CWD at session start, so launch `vigil` from inside the repo you mean to protect; `vigil-dev` already auto-roots via `git rev-parse --show-toplevel`, the other wrappers do not. A mid-session `cd` into a different repo is not retroactively covered.

@@ -84,6 +84,20 @@ if [[ -x "$home/.config/vigil/scripts/hooks/prepare-commit-msg" ]]; then
 else
     fail "prepare-commit-msg hook should be executable"
 fi
+check_file "scripts/hooks/pre-push installed" \
+    "$home/.config/vigil/scripts/hooks/pre-push"
+if [[ -x "$home/.config/vigil/scripts/hooks/pre-push" ]]; then
+    pass "pre-push hook is executable"
+else
+    fail "pre-push hook should be executable"
+fi
+check_file "scripts/vigil-install-review installed" \
+    "$home/.config/vigil/scripts/vigil-install-review"
+if [[ -x "$home/.config/vigil/scripts/vigil-install-review" ]]; then
+    pass "vigil-install-review is executable"
+else
+    fail "vigil-install-review should be executable"
+fi
 
 # Template source files should NOT appear in the install.
 if [[ -f "$home/.config/vigil/policies/dev.template.json" ]]; then

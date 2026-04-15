@@ -1,0 +1,316 @@
+#!/usr/bin/env python3
+"""vigil-install-review: install the per-repo pre-push review gate.
+
+Operator-only. Sandboxed Vigil sessions deny `Bash(vigil-install-review:*)`
+in every policy — see policies/{strict,dev,yolo}. This script writes
+.git/config and .git/hooks files which Phase A's sandbox layer blocks for
+in-session subprocesses.
+
+What it does, in order:
+
+  1. Platform check (Linux + bubblewrap).
+  2. Resolve target repo via `git -C <arg> rev-parse --show-toplevel`.
+  3. Sandbox-coverage check: parse ~/.claude/settings.json directly and
+     assert denyWrite contains the EXACT absolute paths
+     <repo>/.git/config and <repo>/.git/hooks/. The {{CWD}} placeholder
+     in MASTER_DENY_WRITE is expanded at vigil-launch time, so a repo
+     other than the launch CWD will fail this check — operator must
+     re-launch Vigil from inside the target repo first. Re-using the
+     filter script's --check would only validate the JSON against this
+     installer's CWD, which is misleading.
+  4. Hook-collision probe: refuse if any other hook tooling is already
+     installed (core.hooksPath, .git/hooks/* executables, .husky/,
+     pre-commit, lefthook, overcommit). v1 does not compose.
+  5. Create .git/review-gate/ (name avoids `.git/claude-*` to sidestep
+     the built-in non-claude-subfolder write exception).
+  6. Copy prepare-commit-msg + pre-push templates from
+     ~/.config/vigil/scripts/hooks/ (or this script's sibling hooks/
+     dir when run from a non-installed checkout).
+  7. Write .manifest with SHA-256 of the two gate files plus
+     vigil-review.py (whose integrity is load-bearing for the gate's
+     value: if it's swapped for `cat`, the gate is theatre).
+  8. `git config --local core.hooksPath .git/review-gate`.
+  9. Print the per-host / bypass / scope disclaimer.
+"""
+import hashlib
+import json
+import os
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+GATE_DIR_NAME = ".git/review-gate"
+HOOK_FILES = ("prepare-commit-msg", "pre-push")
+COLLISION_FOOTER = (
+    "Vigil's gate v1 refuses to compose with other hook tooling. "
+    "Resolve manually (remove the other tool, skip Vigil's gate on "
+    "this repo, or wait for a future --chain mode)."
+)
+
+
+def die(message: str) -> "int":
+    sys.stderr.write(f"vigil-install-review: {message}\n")
+    return 1
+
+
+def platform_check() -> "str | None":
+    if not sys.platform.startswith("linux"):
+        return (
+            "push gate requires Linux + bubblewrap; CLI remains available "
+            f"via vigil-review (current platform: {sys.platform})"
+        )
+    if shutil.which("bwrap") is None:
+        return (
+            "push gate requires bubblewrap (bwrap not on PATH); "
+            "CLI remains available via vigil-review"
+        )
+    return None
+
+
+def resolve_repo(arg: str) -> "tuple[Path | None, str | None]":
+    target = Path(arg).resolve()
+    r = subprocess.run(
+        ["git", "-C", str(target), "rev-parse", "--show-toplevel"],
+        capture_output=True,
+        text=True,
+    )
+    if r.returncode != 0:
+        return None, f"not a git repository: {target}"
+    # Resolve symlinks so the comparison in sandbox_coverage_check
+    # matches filter-sandbox-denies.py, which expands {{CWD}} via
+    # os.getcwd() (physical/resolved path on Linux).
+    return Path(r.stdout.strip()).resolve(), None
+
+
+def sandbox_coverage_check(repo: Path) -> "str | None":
+    """Parse ~/.claude/settings.json directly; do NOT re-invoke the filter.
+
+    The filter expands {{CWD}} at filter-run time, so checking with
+    `filter-sandbox-denies.py --check` from this installer's CWD would
+    falsely succeed when settings.json was generated for a different CWD.
+    """
+    settings_path = Path(os.path.expanduser("~/.claude/settings.json"))
+    if not settings_path.is_file():
+        return f"~/.claude/settings.json not found at {settings_path}"
+    try:
+        data = json.loads(settings_path.read_text())
+    except (OSError, json.JSONDecodeError) as e:
+        return f"could not parse {settings_path}: {e}"
+
+    sandbox = data.get("sandbox") or {}
+    fs = sandbox.get("filesystem") or {}
+    deny = fs.get("denyWrite") or []
+
+    needed_config = str(repo / ".git" / "config")
+    needed_hooks = str(repo / ".git" / "hooks") + "/"
+    missing = [p for p in (needed_config, needed_hooks) if p not in deny]
+    if missing:
+        return (
+            f"sandbox denyWrite does not cover this repo's git metadata.\n"
+            f"  missing: {', '.join(missing)}\n"
+            f"  Re-launch vigil from inside {repo} so the {{{{CWD}}}} "
+            f"placeholders in MASTER_DENY_WRITE expand to this repo's "
+            f"path, then re-run this installer."
+        )
+    return None
+
+
+def collision_probe(repo: Path) -> "str | None":
+    """Return a multi-line message naming everything that would collide."""
+    findings = []
+
+    r = subprocess.run(
+        ["git", "-C", str(repo), "config", "--local", "--get", "core.hooksPath"],
+        capture_output=True,
+        text=True,
+    )
+    if r.returncode == 0:
+        current = r.stdout.strip()
+        if current and current != GATE_DIR_NAME:
+            if current == ".git/hooks":
+                findings.append(
+                    f"core.hooksPath is explicitly pinned to '{current}' "
+                    "(the default location). Vigil's gate would replace "
+                    "it; remove the pin (`git config --unset "
+                    "core.hooksPath`) if that's intended."
+                )
+            else:
+                findings.append(
+                    f"core.hooksPath is set to '{current}' — another "
+                    "hook tool is already installed."
+                )
+
+    hooks_dir = repo / ".git" / "hooks"
+    if hooks_dir.is_dir():
+        for entry in sorted(hooks_dir.iterdir()):
+            if not entry.is_file():
+                continue
+            if entry.name.endswith(".sample"):
+                continue
+            if os.access(entry, os.X_OK):
+                findings.append(
+                    f"executable hook present: {entry} "
+                    "(operator-authored or another tool's shim)"
+                )
+
+    rel_collisions = (
+        (".husky", "husky directory"),
+        (".pre-commit-config.yaml", "pre-commit config"),
+        ("lefthook.yml", "lefthook config"),
+        ("lefthook.yaml", "lefthook config"),
+        ("lefthook.toml", "lefthook config"),
+        (".overcommit.yml", "overcommit config"),
+    )
+    for rel, label in rel_collisions:
+        path = repo / rel
+        if path.exists():
+            findings.append(f"{label} present at {path}")
+
+    if not findings:
+        return None
+    return "hook-tool collision detected:\n  - " + "\n  - ".join(findings) + \
+           f"\n\n{COLLISION_FOOTER}"
+
+
+def hooks_source_dir() -> Path:
+    """Resolve the hook-template source directory.
+
+    Prefer the installed location (~/.config/vigil/scripts/hooks) so that
+    the deployed templates always match the deployed vigil-review.py.
+    Fall back to this script's sibling hooks/ for development checkouts.
+    """
+    installed = Path(os.path.expanduser("~/.config/vigil/scripts/hooks"))
+    if installed.is_dir():
+        return installed
+    return Path(__file__).resolve().parent / "hooks"
+
+
+def vigil_review_script() -> Path:
+    """Path of the installed vigil-review.py to hash into the manifest."""
+    installed = Path(os.path.expanduser("~/.config/vigil/scripts/vigil-review.py"))
+    if installed.is_file():
+        return installed
+    return Path(__file__).resolve().parent / "vigil-review.py"
+
+
+def sha256_file(path: Path) -> str:
+    h = hashlib.sha256()
+    with open(path, "rb") as fh:
+        for chunk in iter(lambda: fh.read(65536), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def install_gate(repo: Path) -> "str | None":
+    gate_dir = repo / GATE_DIR_NAME
+    src_dir = hooks_source_dir()
+
+    for name in HOOK_FILES:
+        if not (src_dir / name).is_file():
+            return f"missing source template: {src_dir / name}"
+
+    review_script = vigil_review_script()
+    if not review_script.is_file():
+        return f"missing vigil-review.py at {review_script}"
+
+    gate_dir.mkdir(mode=0o755, exist_ok=True)
+
+    manifest_path = gate_dir / ".manifest"
+    old_manifest = None
+    if manifest_path.is_file():
+        old_manifest = manifest_path.read_text()
+
+    manifest_lines = []
+    for name in HOOK_FILES:
+        dest = gate_dir / name
+        shutil.copyfile(src_dir / name, dest)
+        os.chmod(dest, 0o755)
+        manifest_lines.append(f"{sha256_file(dest)}  {dest}")
+    manifest_lines.append(f"{sha256_file(review_script)}  {review_script}")
+
+    new_manifest = "\n".join(manifest_lines) + "\n"
+
+    if old_manifest is not None:
+        prev_path = gate_dir / ".manifest.prev"
+        prev_path.write_text(old_manifest)
+        os.chmod(prev_path, 0o644)
+        old_lines = set(old_manifest.strip().splitlines())
+        new_lines = set(new_manifest.strip().splitlines())
+        changed = sorted(
+            line.split(None, 1)[1] if " " in line else line
+            for line in new_lines - old_lines
+        )
+        if changed:
+            sys.stdout.write(
+                "refreshing hooks: " + ", ".join(changed) + "\n"
+            )
+
+    manifest_path.write_text(new_manifest)
+    os.chmod(manifest_path, 0o644)
+
+    r = subprocess.run(
+        ["git", "-C", str(repo), "config", "--local",
+         "core.hooksPath", GATE_DIR_NAME],
+        capture_output=True,
+        text=True,
+    )
+    if r.returncode != 0:
+        return f"git config core.hooksPath failed: {r.stderr.strip()}"
+    return None
+
+
+DISCLAIMER = """\
+gate installed at {gate_dir}.
+
+Notes:
+  - per-host enforcement: each host that should enforce the gate must
+    install Vigil and re-run `vigil-install-review` against this repo.
+  - bypass: `git push --no-verify` skips the gate (intentional escape
+    hatch; the hook prints this in its abort messages too).
+  - render trust: vigil-review sanitizes commit text, but the operator's
+    terminal emulator must not interpret residual control sequences.
+  - scope: this gate does not substitute for server-side branch
+    protection. For stakes where silent bypass is unacceptable, use
+    server-enforced rules.
+  - init.templateDir: Vigil does not touch this user-level setting, but
+    operators using it for their own hook tooling will hit the
+    collision probe above on subsequent installs — resolve manually.
+  - do NOT run `vigil-install-review` from inside a Vigil session.
+    Sandboxed Vigil policies deny it; this script must run as the
+    operator, outside any sandbox.
+"""
+
+
+def main(argv) -> int:
+    target_arg = argv[1] if len(argv) > 1 else "."
+    if target_arg in ("-h", "--help"):
+        sys.stdout.write(__doc__)
+        return 0
+
+    msg = platform_check()
+    if msg is not None:
+        return die(msg)
+
+    repo, msg = resolve_repo(target_arg)
+    if repo is None:
+        return die(msg)
+
+    msg = sandbox_coverage_check(repo)
+    if msg is not None:
+        return die(msg)
+
+    msg = collision_probe(repo)
+    if msg is not None:
+        return die(msg)
+
+    msg = install_gate(repo)
+    if msg is not None:
+        return die(msg)
+
+    sys.stdout.write(DISCLAIMER.format(gate_dir=repo / GATE_DIR_NAME))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

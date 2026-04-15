@@ -92,6 +92,15 @@ vigil-yolo() {
     _vigil_run_with_logging --settings "$HOME/.config/vigil/policies/yolo.json" "$@"
 }
 
+# Operator-only: install the per-repo pre-push review gate. Sandboxed
+# Vigil sessions deny `Bash(vigil-install-review:*)` in every policy.
+# Run from inside the target repo so the CWD-pinned sandbox denies
+# (filter-sandbox-denies.py expands the placeholder at vigil launch)
+# already cover its .git/config and .git/hooks/.
+vigil-install-review() {
+    "$HOME/.config/vigil/scripts/vigil-install-review" "$@"
+}
+
 # Open a session transcript in $PAGER. With no args, opens the most
 # recent. With -N (e.g., -1), opens the transcript that many positions
 # back from newest: -1 is the previous session, -2 the one before that.

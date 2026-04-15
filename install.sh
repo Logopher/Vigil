@@ -114,6 +114,9 @@ done
 chmod +x "$DEST_DIR/scripts/"*.py 2>/dev/null || true
 chmod +x "$DEST_DIR/scripts/"*.sh 2>/dev/null || true
 chmod +x "$DEST_DIR/scripts/hooks/"* 2>/dev/null || true
+# vigil-install-review has no extension (operator-invoked command name);
+# the *.py / *.sh globs above don't catch it.
+chmod +x "$DEST_DIR/scripts/vigil-install-review" 2>/dev/null || true
 
 for src in "$REPO_DIR/policies/"*; do
     fname="$(basename "$src")"

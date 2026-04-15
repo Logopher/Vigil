@@ -1,0 +1,113 @@
+#!/bin/sh
+# Vigil pre-push gate. Renders unpushed commits through vigil-review
+# (sanitized — strips ANSI, BIDI overrides, zero-width chars) before any
+# push leaves the host. Operator-installed per repo via `vigil-install-review`;
+# never auto-deployed. Bypassable with `git push --no-verify`.
+#
+# Self-check classifies failures so the abort message is useful regardless
+# of who's pushing:
+#   - "Vigil absent on this host" — the user installed Vigil here once,
+#     the repo got transferred to a Vigil-less host, or the operator
+#     runs from a host that doesn't have it set up yet.
+#   - "Vigil present but broken" — vigil-review.py exists but its
+#     self-check fails, or hashes in .git/review-gate/.manifest no longer
+#     match the on-disk artifacts (tamper or stale upgrade).
+#
+# Both classes print the same three escape options so the path forward is
+# always discoverable.
+set -eu
+
+GATE_DIR=".git/review-gate"
+MANIFEST="$GATE_DIR/.manifest"
+VIGIL_REVIEW="$HOME/.config/vigil/scripts/vigil-review.py"
+
+abort() {
+    classification=$1
+    detail=$2
+    cat >&2 <<EOF
+vigil pre-push: $classification
+  $detail
+
+Three options:
+  1. Install Vigil on this host and re-run \`vigil-install-review\` from
+     inside this repo (or fix the broken component named above).
+  2. Remove the gate from this clone:
+         git config --unset core.hooksPath
+  3. Bypass once:
+         git push --no-verify
+EOF
+    exit 1
+}
+
+# `command -v vigil-review` would fail here even on correctly-installed
+# hosts: git invokes pre-push with a non-interactive \$PATH that doesn't
+# source vigil-aliases.sh, so the shell function is invisible. Probe the
+# installed-artifact path directly and invoke by absolute path.
+[ -f "$VIGIL_REVIEW" ] || abort \
+    "Vigil absent on this host" \
+    "missing $VIGIL_REVIEW"
+
+[ -f "$MANIFEST" ] || abort \
+    "Vigil present but broken" \
+    "manifest missing at $MANIFEST"
+
+# Verify on-disk artifacts match the recorded hashes. Self-hashing the
+# pre-push script would be theatre — an attacker who can edit pre-push
+# can also edit the self-check — so the manifest covers the other gate
+# files plus vigil-review.py (whose integrity is load-bearing for the
+# gate's value: if it's swapped for `cat`, the gate is theatre too).
+while IFS= read -r line; do
+    [ -z "$line" ] && continue
+    expected=$(printf '%s' "$line" | awk '{print $1}')
+    # Collapse the "  " separator git's sha256sum format uses; the path
+    # may itself contain spaces, so take everything after the first two.
+    target=$(printf '%s' "$line" | sed -e 's/^[a-f0-9]\{64\}  //')
+    [ -f "$target" ] || abort \
+        "Vigil present but broken" \
+        "manifest references missing file: $target"
+    actual=$(sha256sum "$target" | awk '{print $1}')
+    [ "$expected" = "$actual" ] || abort \
+        "Vigil present but broken" \
+        "hash mismatch for $target (expected $expected, got $actual)"
+done < "$MANIFEST"
+
+# Self-check via the documented zero-range contract: --from-hook with no
+# positional ranges runs vigil-review's capability self-check and exits.
+"$VIGIL_REVIEW" --from-hook || abort \
+    "Vigil present but broken" \
+    "vigil-review --from-hook self-check failed (see above)"
+
+# Build a list of rev-ranges from git's stdin protocol:
+#   <local-ref> <local-oid> <remote-ref> <remote-oid>
+# - local-oid all-zeros => deletion, nothing to review.
+# - remote-oid all-zeros => new branch; review commits not yet on any
+#   tracked remote ref (rev-list local-oid --not --remotes).
+# - otherwise => remote-oid..local-oid.
+ZERO=0000000000000000000000000000000000000000
+ranges=""
+while read -r local_ref local_oid remote_ref remote_oid; do
+    [ -z "$local_ref" ] && continue
+    [ "$local_oid" = "$ZERO" ] && continue
+    if [ "$remote_oid" = "$ZERO" ]; then
+        # New branch: review each commit not yet reachable from any
+        # tracked remote ref. Emit one `oid^!` (single-commit range)
+        # per new commit — vigil-review's rev_range parser takes one
+        # range string per positional, so multi-token rev specs like
+        # `local_oid --not --remotes` would not survive.
+        for oid in $(git rev-list --reverse "$local_oid" --not --remotes); do
+            ranges="$ranges $oid^!"
+        done
+    else
+        ranges="$ranges $remote_oid..$local_oid"
+    fi
+done
+
+# No ranges means git is pushing only deletions or nothing new — render
+# nothing, but still pass through vigil-review for the self-check side
+# effect (already done above) and exit clean.
+if [ -z "$ranges" ]; then
+    exit 0
+fi
+
+# shellcheck disable=SC2086 # word-splitting on $ranges is intentional.
+exec "$VIGIL_REVIEW" --from-hook $ranges

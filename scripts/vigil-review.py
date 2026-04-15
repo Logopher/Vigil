@@ -275,10 +275,11 @@ def main(argv):
         description='Paranoid-rendering commit inspection CLI.',
     )
     parser.add_argument(
-        'rev_range',
-        nargs='?',
-        default='@{u}..HEAD',
-        help='git rev-range to review (default: @{u}..HEAD)',
+        'rev_ranges',
+        nargs='*',
+        metavar='REV_RANGE',
+        help='git rev-ranges to review (default: @{u}..HEAD). With '
+             '--from-hook, zero ranges runs only the self-check and exits.',
     )
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument(
@@ -309,19 +310,32 @@ def main(argv):
                 sys.stderr.write(f'  - {p}\n')
             return 2
 
-    shas, err = rev_list(args.rev_range, cwd)
-    if shas is None:
-        sys.stderr.write(
-            f'vigil-review: could not resolve range {args.rev_range!r}: {err}\n'
-        )
-        return 1
-    if not shas:
-        sys.stdout.write(f'No commits in range {args.rev_range}.\n')
-        return 0
+    ranges = list(args.rev_ranges)
+    if not ranges:
+        if args.from_hook:
+            # Zero ranges in --from-hook is the self-check-only contract:
+            # the pre-push hook calls this at the top of its self-check
+            # phase to verify Python + capability surface in one shot.
+            return 0
+        ranges = ['@{u}..HEAD']
 
     interactive = not (args.prompt or args.from_hook)
-    for sha in shas:
-        if _render_commit(sha, cwd, interactive) == 'quit':
+    quit_loop = False
+    for rev_range in ranges:
+        shas, err = rev_list(rev_range, cwd)
+        if shas is None:
+            sys.stderr.write(
+                f'vigil-review: could not resolve range {rev_range!r}: {err}\n'
+            )
+            return 1
+        if not shas:
+            sys.stdout.write(f'No commits in range {rev_range}.\n')
+            continue
+        for sha in shas:
+            if _render_commit(sha, cwd, interactive) == 'quit':
+                quit_loop = True
+                break
+        if quit_loop:
             break
 
     if args.prompt:

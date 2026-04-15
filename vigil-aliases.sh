@@ -48,6 +48,15 @@ _vigil_run_with_logging() (
         unset "$_vigil_v" 2>/dev/null || true
     done < <(compgen -v)
 
+    # Optional post-scrub env injection. Lets users wire up opt-in
+    # vars — notably an ssh-agent socket for signed commits — without
+    # leaking them into every interactive shell via ~/.bashrc. The
+    # file is sourced, so keep it to `export VAR=value` lines.
+    if [[ -f "$HOME/.config/vigil/signing.env" ]]; then
+        # shellcheck disable=SC1091
+        . "$HOME/.config/vigil/signing.env"
+    fi
+
     VIGIL_SESSION_ID=$(date +%Y%m%d-%H%M%S)
     export VIGIL_SESSION_ID
     export VIGIL_LOG_DIR="$HOME/vigil-logs"

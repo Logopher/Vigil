@@ -71,14 +71,10 @@ for src in "$REPO_DIR/policies/"*; do
     fi
 done
 
-for src in "$REPO_DIR/scripts/"*; do
-    [[ -d "$src" ]] && continue
-    add_if_exists "$DEST_DIR/scripts/$(basename "$src")"
-done
-for src in "$REPO_DIR/scripts/hooks/"*; do
-    [[ -d "$src" ]] && continue
-    add_if_exists "$DEST_DIR/scripts/hooks/$(basename "$src")"
-done
+while IFS= read -r -d '' f; do
+    rel="${f#"$REPO_DIR/scripts/"}"
+    add_if_exists "$DEST_DIR/scripts/$rel"
+done < <(find "$REPO_DIR/scripts" -type f -print0)
 
 add_if_exists "$DEST_DIR/profiles/default"
 
@@ -130,7 +126,12 @@ done
 # dirs, so user additions and runtime state are preserved automatically.
 # Subdirs under profiles/default/ are derived from the repo so new ones
 # (e.g., commands/) are picked up without editing this script.
-empty_dirs=("$DEST_DIR/policies" "$DEST_DIR/scripts/hooks" "$DEST_DIR/scripts" "$DEST_DIR/profiles")
+empty_dirs=("$DEST_DIR/policies" "$DEST_DIR/profiles")
+while IFS= read -r -d '' d; do
+    rel="${d#"$REPO_DIR/scripts"}"
+    empty_dirs+=("$DEST_DIR/scripts$rel")
+done < <(find "$REPO_DIR/scripts" -mindepth 1 -depth -type d -print0)
+empty_dirs+=("$DEST_DIR/scripts")
 for src in "$REPO_DIR/profiles/default/"*; do
     [[ -d "$src" ]] && empty_dirs+=("$CLAUDE_DIR/$(basename "$src")")
 done

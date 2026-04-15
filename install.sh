@@ -102,15 +102,11 @@ chmod +x "$DEST_DIR/doctor.sh"
 # a tool that creates new credential paths they want denied). The
 # `hooks/` subdirectory ships git-hook templates consumed by Phase D's
 # vigil-install-review; they are not auto-installed into any repo.
-mkdir -p "$DEST_DIR/scripts/hooks"
-for src in "$REPO_DIR/scripts/"*; do
-    [[ -d "$src" ]] && continue
-    cp "$src" "$DEST_DIR/scripts/"
-done
-for src in "$REPO_DIR/scripts/hooks/"*; do
-    [[ -d "$src" ]] && continue
-    cp "$src" "$DEST_DIR/scripts/hooks/"
-done
+while IFS= read -r -d '' f; do
+    rel="${f#"$REPO_DIR/scripts/"}"
+    mkdir -p "$(dirname "$DEST_DIR/scripts/$rel")"
+    cp "$f" "$DEST_DIR/scripts/$rel"
+done < <(find "$REPO_DIR/scripts" -type f -print0)
 chmod +x "$DEST_DIR/scripts/"*.py 2>/dev/null || true
 chmod +x "$DEST_DIR/scripts/"*.sh 2>/dev/null || true
 chmod +x "$DEST_DIR/scripts/hooks/"* 2>/dev/null || true

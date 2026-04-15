@@ -37,6 +37,7 @@
     "deny": [
       "Bash(rm:*)",
       "Bash(sudo:*)",
+      "Bash(vigil-install-review:*)",
       "Bash(git push:*)",
       "Bash(git pull:*)",
       "Bash(git fetch:*)",

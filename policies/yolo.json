@@ -3,7 +3,8 @@
     "defaultMode": "bypassPermissions",
     "deny": [
       "Bash(rm:*)",
-      "Bash(sudo:*)"
+      "Bash(sudo:*)",
+      "Bash(vigil-install-review:*)"
     ]
   }
 }

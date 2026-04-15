@@ -41,7 +41,7 @@ All platform branches in the codebase:
 - **`bash` version.** macOS ships bash 3.2. All bash-specific features used (parameter expansion with `${var/#.../...}`, `[[ ]]`, `shopt -s nullglob`, `case` with `|` alternatives) are supported in 3.2.
 - **`find -mindepth` / `-maxdepth` / `-empty`.** GNU extensions adopted by BSD `find` on macOS 10.9+, FreeBSD 8+. Untested on older systems.
 - **Symlink creation.** `install.sh` uses `ln -s`. Linux and macOS: reliable. WSL2: reliable within the WSL filesystem. MSYS2/Git Bash on Windows: unreliable depending on user permissions and Windows version.
-- **`init.templateDir` interaction with `vigil-install-review`.** Vigil does not touch the user-level `init.templateDir` setting, but operators who have it configured (husky-style tooling, corporate templates) will hit the gate installer's collision probe when their template-seeded hooks land in `.git/hooks/`. Resolution is manual: either remove the competing template or skip Vigil's gate on that repo. See `VIGIL_PLAN.md` Phase D for the probe's full detection list.
+- **`init.templateDir` interaction with `vigil-install-review`.** Vigil does not touch the user-level `init.templateDir` setting, but operators who have it configured (husky-style tooling, corporate templates) will hit the gate installer's collision probe when their template-seeded hooks land in `.git/hooks/`. Resolution is manual: either remove the competing template or skip Vigil's gate on that repo. The probe's full detection list is at the top of [`scripts/vigil-install-review`](scripts/vigil-install-review) under "Collision targets."
 
 ## Reporting issues
 

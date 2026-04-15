@@ -6,7 +6,26 @@ in every policy — see policies/{strict,dev,yolo}. This script writes
 .git/config and .git/hooks files which Phase A's sandbox layer blocks for
 in-session subprocesses.
 
-What it does, in order:
+== Collision targets ==
+
+The hook-collision probe refuses to install if any of the following are
+present in the target repo. This list is the canonical reference — other
+docs (e.g. COMPATIBILITY.md) link here rather than duplicating it.
+
+  - core.hooksPath set to any value other than Vigil's own gate dir
+    (including the default `.git/hooks`, when explicitly pinned).
+  - Any executable file under .git/hooks/ that is not a *.sample
+    (operator-authored hook or another tool's shim).
+  - .husky/ directory (husky).
+  - .pre-commit-config.yaml (pre-commit framework).
+  - lefthook.yml / lefthook.yaml / lefthook.toml (lefthook).
+  - .overcommit.yml (overcommit).
+
+Implemented in `collision_probe` below. v1 does not compose with any of
+these; resolution is manual (remove the competing tool, skip Vigil's
+gate on that repo, or wait for a future --chain mode).
+
+== What it does, in order ==
 
   1. Platform check (Linux + bubblewrap).
   2. Resolve target repo via `git -C <arg> rev-parse --show-toplevel`.
@@ -18,9 +37,8 @@ What it does, in order:
      re-launch Vigil from inside the target repo first. Re-using the
      filter script's --check would only validate the JSON against this
      installer's CWD, which is misleading.
-  4. Hook-collision probe: refuse if any other hook tooling is already
-     installed (core.hooksPath, .git/hooks/* executables, .husky/,
-     pre-commit, lefthook, overcommit). v1 does not compose.
+  4. Hook-collision probe (see Collision targets above). v1 does not
+     compose.
   5. Create .git/review-gate/ (name avoids `.git/claude-*` to sidestep
      the built-in non-claude-subfolder write exception).
   6. Copy prepare-commit-msg + pre-push templates from

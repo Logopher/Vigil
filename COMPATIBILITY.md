@@ -24,6 +24,10 @@ Platform support describes the OS and shell surface this tool targets. Launch co
 
 The discriminator between full coverage and profile-only is the bash wrappers, not the OS. Desktop-app users on macOS and Linux receive equivalent (partial) coverage; terminal users on macOS and Linux receive equivalent (full) coverage.
 
+## Commit-review gate
+
+The opt-in pre-push gate installed by `vigil-install-review` is verified on Linux and WSL2 only. macOS and native Windows (Git Bash / MSYS2) receive `vigil-review` as a CLI viewer, but the installer aborts on its platform check — the gate's security model depends on the bubblewrap-backed sandbox enforcement that keeps the agent out of `.git/`, which is Linux-specific. The Python and shell scripts themselves would run on other platforms; the protection they're meant to provide would not. See [`THREAT_MODEL.md`](THREAT_MODEL.md#commit-review-gate-opt-in) for scope and limits.
+
 ## Platform-specific code
 
 All platform branches in the codebase:
@@ -37,6 +41,7 @@ All platform branches in the codebase:
 - **`bash` version.** macOS ships bash 3.2. All bash-specific features used (parameter expansion with `${var/#.../...}`, `[[ ]]`, `shopt -s nullglob`, `case` with `|` alternatives) are supported in 3.2.
 - **`find -mindepth` / `-maxdepth` / `-empty`.** GNU extensions adopted by BSD `find` on macOS 10.9+, FreeBSD 8+. Untested on older systems.
 - **Symlink creation.** `install.sh` uses `ln -s`. Linux and macOS: reliable. WSL2: reliable within the WSL filesystem. MSYS2/Git Bash on Windows: unreliable depending on user permissions and Windows version.
+- **`init.templateDir` interaction with `vigil-install-review`.** Vigil does not touch the user-level `init.templateDir` setting, but operators who have it configured (husky-style tooling, corporate templates) will hit the gate installer's collision probe when their template-seeded hooks land in `.git/hooks/`. Resolution is manual: either remove the competing template or skip Vigil's gate on that repo. See `VIGIL_PLAN.md` Phase D for the probe's full detection list.
 
 ## Reporting issues
 

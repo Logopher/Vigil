@@ -43,6 +43,13 @@ Runs at session start and end against `<repo>/.claude/worktrees/`. Its invariant
 
 Worktree matching is by basename, not full path, to survive Windows/MSYS2 path-format mismatches (`C:/...` vs `/c/...`).
 
+## Load-bearing paths
+
+Paths whose contents are part of Vigil's security posture. Do not modify them from the coding agent:
+
+1. `.git/review-gate/` in any repo where `vigil-install-review` has run. The scripts inside and `.git/review-gate/.manifest` are checked by the pre-push hook's SHA-256 tamper self-check; any drift aborts the push.
+2. `MASTER_DENY_WRITE` in `scripts/filter-sandbox-denies.py`, specifically the `{{CWD}}/.git/config` and `{{CWD}}/.git/hooks/` entries (resolved per-session against the repo root) plus the literal `~/.gitconfig`. These are the enforcement layer that blocks subprocess tampering with git configuration; removing or narrowing them breaks the commit-review gate's security claim.
+
 ## Editing conventions
 
 - Permission lists in the JSON files are order-insensitive but duplicates between `allow`/`deny` resolve to `deny` — add to `deny` rather than removing from `allow` when tightening.

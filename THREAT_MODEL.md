@@ -78,9 +78,26 @@ The allowlist is extensible from the operator's own `~/.bashrc`:
 _vigil_env_allowlist+=(AWS_PROFILE AWS_REGION)
 ```
 
+### Commit-review gate (opt-in)
+
+An optional per-repo pre-push hook installed via `vigil-install-review <repo>`. When present, every commit in the outgoing ref-range is rendered through `vigil-review` before the push proceeds, with a paranoid sanitizer that strips ANSI escapes, C1 controls, and Unicode BIDI marks so a hostile commit message cannot spoof the review UI. The operator confirms y/N; a no aborts the push.
+
+**What it blocks.** Commit poisoning — a prompt-injected agent quietly introducing a malicious commit — surfaced to the operator before it leaves the host, on hosts where the gate is installed and `.git/review-gate/` is intact. The hook's self-check hashes its own scripts against `.git/review-gate/.manifest` and aborts on tamper.
+
+**What it does not block.**
+
+- `--no-verify` (by design; the escape must exist for the gate to coexist with other tools, and the abort message names it explicitly).
+- Operator fatigue or reflexive approval.
+- Render exploits against a terminal that interprets escape sequences the sanitizer missed.
+- Cross-host mismatch: the gate is per-host, per-repo; if the push happens from a host where `vigil-install-review` was never run, nothing intercepts it.
+- Composition with other client-side hook managers (husky, pre-commit, lefthook). The installer's collision probe refuses rather than chains — coexistence is deferred.
+- **Silent-skip failure modes inherent to client-side hooks.** If the hook file loses its execute bit during transfer (tar/zip/`rsync` without `-p`), if its shebang points at an interpreter absent on the host, or if CRLF mangling breaks the shebang line, git silently skips the hook and the push proceeds with no review. This is a fundamental client-side-hook limitation, not specific to Vigil.
+
+**When to use something stronger.** For stakes where silent bypass is unacceptable, server-side branch protection is the correct enforcement layer. Vigil's gate is a visibility aid for the operator's own host; it does not substitute for server-side rules.
+
 ### Out of scope
 
-- **Commit review.** A poisoned commit from a prompt-injected agent is not detectable by a config tool. Use a git `pre-push` hook or human code review.
+- **Commit review.** See [Commit-review gate (opt-in)](#commit-review-gate-opt-in) above — Vigil now ships an opt-in gate; it is a visibility aid, not a guarantee.
 - **Social engineering.** The tool cannot protect against an operator who is manipulated into approving malicious actions or elevating to `yolo` for an attack surface.
 - **Network-level MITM, supply chain, OS compromise, hardware attacks.** Out of scope entirely.
 

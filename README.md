@@ -90,6 +90,10 @@ The **default profile** is safe by construction: plan mode, the hard deny list, 
 
 `vigil-log-prune` deletes old session logs from `~/vigil-logs/`. A `SessionStart` hook runs the same pruner automatically with defaults of 90 days and 2 GB total. For manual pruning, pass custom thresholds: `vigil-log-prune --older-than 30d --dry-run`.
 
+## Commit-review gate (opt-in)
+
+An optional per-repo pre-push review, installed by running `vigil-install-review` inside the target repo. Each outgoing commit is rendered with a paranoid sanitizer (stripping ANSI, C1, and BIDI escapes) and the operator confirms y/N before the push proceeds. See [`THREAT_MODEL.md`](THREAT_MODEL.md#commit-review-gate-opt-in) for scope, silent-skip failure modes, and the cases where server-side branch protection is the correct layer instead.
+
 ## Updating
 
 Repo edits do not change session behavior until the installer runs. To refresh:
@@ -121,6 +125,7 @@ Removes only files placed by `install.sh`. Claude Code runtime state in `~/.clau
 - [`AUDIENCE.md`](AUDIENCE.md) — the longer version of "who this is for," including common misconceptions and a self-check.
 - [`LIFECYCLE.md`](LIFECYCLE.md) — project stage framework. Vigil is pre-1.0; interfaces may change.
 - [`VIGIL_PLAN.md`](VIGIL_PLAN.md) — near-term roadmap, including the commit-review gate currently in design.
+- [Commit-review gate](THREAT_MODEL.md#commit-review-gate-opt-in) — scope and limits of the opt-in pre-push gate.
 - [`BACKLOG.md`](BACKLOG.md) — longer tail of ideas and deferred work.
 
 ## License

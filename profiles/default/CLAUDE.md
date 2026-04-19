@@ -23,6 +23,10 @@ The Vigil profile denies a fixed set of Bash patterns at the permission layer. A
 
 Authoritative list is in `settings.template.json`. If a command isn't in any category and you're unsure, ask before invoking — don't probe by trying.
 
+### `git -C` breaks the `git commit` / `git tag` carve-out
+
+The sandbox carves out `git commit` and `git tag` (via `excludedCommands` in `settings.template.json`) so they can reach the signing agent outside the sandbox. The matcher is prefix-based on the command line, so `git -C <path> commit …` does not match — it runs inside the sandbox and typically fails (no access to `SSH_AUTH_SOCK` or signing keys). When you need to commit or tag from somewhere other than the current working directory, `cd` into the repo first; do not reach for `-C`.
+
 ## Collaboration rules
 
 ### Commit discipline

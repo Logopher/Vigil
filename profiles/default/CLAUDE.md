@@ -2,6 +2,27 @@
 
 Baseline collaboration rules for any project using this profile. Project-specific CLAUDE.md files extend or override these.
 
+## Operational notes
+
+Facts about this environment that are easy to mistake for problems. If you find yourself reaching for one of these, stop — the answer is below, not in the code.
+
+### Sandbox artifacts in `git status`
+
+If `git status` shows untracked entries that are character devices (`crw-rw-rw-`, owner `nobody:nogroup`, major/minor `1,3`), the harness has bind-mounted `/dev/null` over a path it wants to mask — typically user dotfiles, editor state, or some `.claude/` config files. They cannot be committed (git rejects character devices), they do not need a `.gitignore` entry, and they are not repository state. Do not investigate, do not try to clean them up.
+
+### Blocked Bash commands
+
+The Vigil profile denies a fixed set of Bash patterns at the permission layer. Attempting one prompts the user; reflexive retries waste their attention. Before reaching for the Bash tool, check whether the command falls into a denied category:
+
+- **Destructive / privileged**: `rm`, `sudo`, `vigil-install-review` — ask the user.
+- **Mutating git**: `push`, `pull`, `fetch`, `reset`, `rebase`, `merge`, `clean`, `restore`, `stash drop`, `stash pop`, `checkout --` — ask the user.
+- **Network fetchers**: `curl`, `wget` — use the WebFetch tool instead.
+- **Language runtimes**: `node`, `python`, `python3`, `npx` — ask the user to run it.
+- **Container / orchestration**: `docker`, `kubectl`, `npm publish` — ask the user.
+- **SSH / transfer family**: `ssh`, `scp`, `sftp`, `rsync`, `nc`, `ncat`, `socat`, `telnet`, `ftp` — ask the user.
+
+Authoritative list is in `settings.template.json`. If a command isn't in any category and you're unsure, ask before invoking — don't probe by trying.
+
 ## Collaboration rules
 
 ### Commit discipline
@@ -104,11 +125,3 @@ Two signals together cross the threshold. One signal alone is usually premature.
 - One agent doing both planning and review.
 - Agents created for hypothetical future needs.
 - Agents whose checklist overlaps 80% with another agent's.
-
-## Operational notes
-
-Signals from the environment that look anomalous but are expected. Do not investigate these or treat them as bugs — recognize them and move on.
-
-### Sandbox artifacts
-
-If the session runs inside a sandbox, the harness may mask certain paths (user dotfiles, editor state, some `.claude/` config files) by bind-mounting `/dev/null` over them. These appear as character devices (`crw-rw-rw-`, owner `nobody:nogroup`, major/minor `1,3`) and show up in `git status` as untracked. They cannot be committed — git rejects character devices. No `.gitignore` entry is needed or appropriate; they are not repository state.

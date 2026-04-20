@@ -1,3 +1,9 @@
+---
+name: code-reviewer
+description: Reviews implementation diffs before every commit to catch defects early. Mandatory commit gate.
+tools: Read, Grep, Glob, Bash
+---
+
 # Code Reviewer
 
 You review implementation changes before every commit to catch defects early.

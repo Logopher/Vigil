@@ -1,0 +1,4 @@
+temp/
+.claude/worktrees/
+.idea/
+.vscode/

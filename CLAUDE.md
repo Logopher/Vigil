@@ -58,61 +58,19 @@ Paths whose contents are part of Vigil's security posture. Do not modify them fr
 
 ## Collaboration rules
 
-### Commit discipline
+Global collaboration rules live in `~/.claude/CLAUDE.md` — apply them as written. Project-specific extensions below.
 
-Each commit contains exactly one logical unit of work. Never bundle independent changes. Keep gate-passing fixes — changes made to resolve code-reviewer findings — in their own commit, separate from new feature code; bundling them obscures what the review actually caught.
+### Commit discipline — extension
 
 Edits here are live changes to Claude's behavior across every consuming project. Clean isolated commits matter for bisecting misbehavior later.
 
-When a plan has multiple steps, evaluate file overlap before starting:
+### Commit scopes
 
-- Steps that touch the same files must run in series. Commit step N before starting step N+1.
-- Steps that touch entirely different files may run in parallel using isolated worktrees, each producing its own commit on its own branch. Only use worktree agents when each task is substantial enough to justify the coordination overhead; for trivial single-file edits, sequential execution in the main context is faster.
+This project's scopes: `hooks`, `policies`, `profiles`, `aliases`, `config`.
 
-Commit as soon as a unit is complete and its gates pass. Do not defer multiple commits to the same working state.
-
-Before committing, check that no new TODO, FIXME, or placeholder comments were introduced by the change.
-
-### Commit message format
-
-Angular-style conventional commits.
-
-- Format: `<type>(<scope>): <summary>`
-- One scope per commit; split if spans multiple.
-- Types: `feat`, `fix`, `refactor`, `style`, `docs`, `test`, `chore`.
-- Scopes: `hooks`, `policies`, `profiles`, `aliases`, `config`.
-
-### Decision escalation
-
-Stop and ask before writing code if the plan has an open question, multiple reasonable approaches exist and the plan is silent, a runtime error reveals the plan's assumptions were wrong, or the spec is ambiguous on a detail that affects output. Do not pick an approach and mention it in passing — describe options and trade-offs, then wait.
-
-### Problem tracking
-
-When you hit something unexpected during implementation, note it in chat alongside the commit summary. At session end, print a consolidated list.
-
-### Session hygiene
-
-Build one unit per session. After finishing a major unit, start a fresh session.
-
-### Never modify CLAUDE.md autonomously
-
-Changes to any CLAUDE.md file require explicit developer instruction.
-
-### Agent-gate workflow
-
-Specialist agents live in `.claude/agents/`. Invoke them explicitly by name.
+### Project agents
 
 | Agent | File | When to use |
 |---|---|---|
 | `architect` | `.claude/agents/architect.md` | Non-trivial changes; preserves load-bearing invariants and installer contracts. |
 | `code-reviewer` | `.claude/agents/code-reviewer.md` | Before every commit; emphasizes shell, JSON settings, and installer concerns. |
-
-For non-trivial changes:
-
-1. Invoke `architect` — produce a written plan; do not write code yet.
-2. Developer reviews and approves the plan.
-3. Implement against the approved plan.
-4. Invoke `code-reviewer` — resolve all findings before committing.
-5. Commit only after gates pass.
-
-For small isolated fixes (single-file, no interface changes), steps 1–2 may be skipped at the developer's discretion.

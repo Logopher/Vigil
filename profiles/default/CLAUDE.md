@@ -62,6 +62,8 @@ Stop and ask before writing code if:
 
 Do not pick an approach and mention it in passing. Describe the options and trade-offs, then wait for a decision.
 
+Do this proactively — not just when stuck — before expensive exploratory work (codebase-wide search, multi-file refactor planning, new-feature scoping). Surface the approach in plan mode; cheaper to reject a wrong plan than to abort a wrong execution.
+
 ### Token discipline
 
 - Read files at given paths directly; don't hunt or re-read files already in context.
@@ -70,7 +72,6 @@ Do not pick an approach and mention it in passing. Describe the options and trad
 - Skip preamble ("Let me…", "I'll now…") unless asked for reasoning.
 - When the user gives a file or line, go straight there instead of exploring.
 - For verbose tool work (running a test suite, grepping a large codebase, fetching long docs), delegate to a subagent via the Agent tool so only the summary returns to the main context.
-- Before expensive exploratory work (codebase-wide search, multi-file refactor planning, new-feature scoping), surface the approach in plan mode first — cheaper to reject a wrong plan than to abort a wrong execution.
 
 ### Precision over umbrella terms
 

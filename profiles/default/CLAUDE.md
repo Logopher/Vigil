@@ -69,6 +69,8 @@ Do not pick an approach and mention it in passing. Describe the options and trad
 - Prefer `Edit` over rewriting whole files.
 - Skip preamble ("Let me…", "I'll now…") unless asked for reasoning.
 - When the user gives a file or line, go straight there instead of exploring.
+- For verbose tool work (running a test suite, grepping a large codebase, fetching long docs), delegate to a subagent via the Agent tool so only the summary returns to the main context.
+- Before expensive exploratory work (codebase-wide search, multi-file refactor planning, new-feature scoping), surface the approach in plan mode first — cheaper to reject a wrong plan than to abort a wrong execution.
 
 ### Precision over umbrella terms
 
@@ -85,6 +87,8 @@ Build one unit (component, page, module) per session. Do not try to build multip
 ### Project CLAUDE.md hygiene
 
 When a project's CLAUDE.md restates rules already in this global file, prefer thin pointers to full restatement. The project file should contain only project-specific content plus explicit overrides or extensions of the global rules (with the override stated as such). Periodically audit project CLAUDE.md files against this one for drift; drift works in both directions — new global rules not yet reflected as pointers in projects, and project restatements that have silently diverged from global. An audit pass typically cuts 20–30% of a mature project CLAUDE.md without losing any rule.
+
+Target budget: under ~2,000 tokens. CLAUDE.md is re-read on every turn, so every line has a recurring cost. Point to files rather than inlining reference material.
 
 ### Never modify CLAUDE.md autonomously
 

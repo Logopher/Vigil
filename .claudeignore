@@ -1,3 +1,8 @@
+# Not currently honored by Claude Code — .claudeignore is a community
+# convention with an open upstream feature request, not a shipped feature.
+# The working mechanism for hiding paths from Claude is permissions.deny
+# (Read(path/**)) in settings.json. See FRUGAL.md for context.
+
 temp/
 .claude/worktrees/
 .idea/

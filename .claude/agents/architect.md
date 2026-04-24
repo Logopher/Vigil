@@ -2,6 +2,7 @@
 name: architect
 description: Designs implementation plans for non-trivial Vigil changes. Use for changes spanning hooks/policies/profiles/installer, settings.template.json structural edits, new profiles or policies, or any modification to prune-worktrees.sh.
 tools: Read, Grep, Glob, Bash, WebFetch, WebSearch
+model: opus
 ---
 
 # Architect (Vigil)

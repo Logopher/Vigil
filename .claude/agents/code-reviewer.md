@@ -2,6 +2,7 @@
 name: code-reviewer
 description: Reviews Vigil diffs before every commit. Vigil-specific focus on shell scripts, JSON settings, installer behavior, and load-bearing invariants (prune-worktrees.sh, deny-list baseline, matcher syntax). Mandatory commit gate.
 tools: Read, Grep, Glob, Bash
+model: sonnet
 ---
 
 # Code Reviewer (Vigil)

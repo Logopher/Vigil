@@ -62,6 +62,18 @@ Stop and ask before writing code if:
 
 Do not pick an approach and mention it in passing. Describe the options and trade-offs, then wait for a decision.
 
+### Token discipline
+
+- Read files at given paths directly; don't hunt or re-read files already in context.
+- Trim command output to what's diagnostically useful — failing lines or stack traces, not full logs.
+- Prefer `Edit` over rewriting whole files.
+- Skip preamble ("Let me…", "I'll now…") unless asked for reasoning.
+- When the user gives a file or line, go straight there instead of exploring.
+
+### Precision over umbrella terms
+
+When listing things to audit, rotate, review, or inventory, enumerate the specific items — account logins, personal access tokens, OAuth integrations, env vars, deploy hooks, DNS, etc. — rather than using a category noun like "credentials", "secrets", or "config". Umbrella terms force the next turn to be a clarifying question; the enumeration is what's being asked for anyway.
+
 ### Problem tracking
 
 When you hit something unexpected during implementation — an assumption you had to make, an ambiguity resolved without input, an edge case or interaction not covered by the plan — note it in chat alongside the commit summary. At session end, print a consolidated list.
@@ -69,6 +81,10 @@ When you hit something unexpected during implementation — an assumption you ha
 ### Session hygiene
 
 Build one unit (component, page, module) per session. Do not try to build multiple in a single prompt. After finishing a major unit, start a fresh session — the project's `CLAUDE.md` gives enough context to pick up where you left off.
+
+### Project CLAUDE.md hygiene
+
+When a project's CLAUDE.md restates rules already in this global file, prefer thin pointers to full restatement. The project file should contain only project-specific content plus explicit overrides or extensions of the global rules (with the override stated as such). Periodically audit project CLAUDE.md files against this one for drift; drift works in both directions — new global rules not yet reflected as pointers in projects, and project restatements that have silently diverged from global. An audit pass typically cuts 20–30% of a mature project CLAUDE.md without losing any rule.
 
 ### Never modify CLAUDE.md autonomously
 

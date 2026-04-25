@@ -77,6 +77,23 @@ MASTER_DENY_WRITE = (
     "~/.gitconfig",
     "{{CWD}}/.git/config",
     "{{CWD}}/.git/hooks/",
+    # Vigil-installed config — belt-and-suspenders subprocess coverage.
+    # Entries that do not exist on the host drop out with a diagnostic (type check).
+    "~/.claude/CLAUDE.md",
+    "~/.claude/settings.json",
+    "~/.claude/hooks/",
+    "~/.claude/agents/",
+    "~/.claude/skills/",
+    "~/.claude/commands/",
+    "~/.config/vigil/",
+    # Shell RC files that source vigil-aliases.sh.
+    "~/.bashrc",
+    "~/.zshrc",
+    "~/.bash_profile",
+    "~/.zprofile",
+    "~/.profile",
+    "~/.zshenv",
+    "~/.bash_aliases",
 )
 
 

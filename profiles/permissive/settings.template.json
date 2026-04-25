@@ -1,0 +1,110 @@
+{
+  "sandbox": {
+    "enabled": true,
+    "failIfUnavailable": true,
+    "autoAllowBashIfSandboxed": true,
+    "allowUnsandboxedCommands": false,
+    "enableWeakerNestedSandbox": false,
+    "enableWeakerNetworkIsolation": false,
+    "excludedCommands": ["git commit *", "git tag *"],
+    "filesystem": {},
+    "network": {
+      "allowedDomains": [],
+      "allowAllUnixSockets": false,
+      "allowLocalBinding": false
+    }
+  },
+  "permissions": {
+    "defaultMode": "plan",
+    "deny": [
+      "Bash(rm:*)",
+      "Bash(sudo:*)",
+      "Bash(vigil-install-review:*)",
+      "Write({{HOME}}/.claude/CLAUDE.md)",
+      "Edit({{HOME}}/.claude/CLAUDE.md)",
+      "MultiEdit({{HOME}}/.claude/CLAUDE.md)",
+      "Write({{HOME}}/.claude/USER_CONTEXT.md)",
+      "Edit({{HOME}}/.claude/USER_CONTEXT.md)",
+      "MultiEdit({{HOME}}/.claude/USER_CONTEXT.md)",
+      "Write({{HOME}}/.claude/settings.json)",
+      "Edit({{HOME}}/.claude/settings.json)",
+      "MultiEdit({{HOME}}/.claude/settings.json)",
+      "Write({{HOME}}/.claude/settings.local.json)",
+      "Edit({{HOME}}/.claude/settings.local.json)",
+      "MultiEdit({{HOME}}/.claude/settings.local.json)",
+      "Write({{HOME}}/.claude/keybindings.json)",
+      "Edit({{HOME}}/.claude/keybindings.json)",
+      "MultiEdit({{HOME}}/.claude/keybindings.json)",
+      "Write({{HOME}}/.claude/hooks/**)",
+      "Edit({{HOME}}/.claude/hooks/**)",
+      "MultiEdit({{HOME}}/.claude/hooks/**)",
+      "Write({{HOME}}/.claude/agents/**)",
+      "Edit({{HOME}}/.claude/agents/**)",
+      "MultiEdit({{HOME}}/.claude/agents/**)",
+      "Write({{HOME}}/.claude/skills/**)",
+      "Edit({{HOME}}/.claude/skills/**)",
+      "MultiEdit({{HOME}}/.claude/skills/**)",
+      "Write({{HOME}}/.claude/commands/**)",
+      "Edit({{HOME}}/.claude/commands/**)",
+      "MultiEdit({{HOME}}/.claude/commands/**)",
+      "Write({{HOME}}/.config/vigil/**)",
+      "Edit({{HOME}}/.config/vigil/**)",
+      "MultiEdit({{HOME}}/.config/vigil/**)",
+      "Write({{HOME}}/.bashrc)",
+      "Edit({{HOME}}/.bashrc)",
+      "MultiEdit({{HOME}}/.bashrc)",
+      "Write({{HOME}}/.zshrc)",
+      "Edit({{HOME}}/.zshrc)",
+      "MultiEdit({{HOME}}/.zshrc)",
+      "Write({{HOME}}/.bash_profile)",
+      "Edit({{HOME}}/.bash_profile)",
+      "MultiEdit({{HOME}}/.bash_profile)",
+      "Write({{HOME}}/.zprofile)",
+      "Edit({{HOME}}/.zprofile)",
+      "MultiEdit({{HOME}}/.zprofile)",
+      "Write({{HOME}}/.profile)",
+      "Edit({{HOME}}/.profile)",
+      "MultiEdit({{HOME}}/.profile)",
+      "Write({{HOME}}/.zshenv)",
+      "Edit({{HOME}}/.zshenv)",
+      "MultiEdit({{HOME}}/.zshenv)",
+      "Write({{HOME}}/.bash_aliases)",
+      "Edit({{HOME}}/.bash_aliases)",
+      "MultiEdit({{HOME}}/.bash_aliases)",
+      "Write({{HOME}}/.gitconfig)",
+      "Edit({{HOME}}/.gitconfig)",
+      "MultiEdit({{HOME}}/.gitconfig)"
+    ]
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "{{PROFILE_DIR}}/hooks/prune-worktrees.sh",
+            "timeout": 15
+          },
+          {
+            "type": "command",
+            "command": "{{PROFILE_DIR}}/hooks/prune-logs.sh",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "{{PROFILE_DIR}}/hooks/prune-worktrees.sh",
+            "timeout": 15
+          }
+        ]
+      }
+    ]
+  }
+}

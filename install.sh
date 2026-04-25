@@ -62,6 +62,7 @@ check_path "$CLAUDE_DIR"
 check_path "$DEST_DIR/vigil-aliases.sh"
 check_path "$DEST_DIR/doctor.sh"
 check_path "$DEST_DIR/profiles/default"
+check_path "$DEST_DIR/profiles/permissive"
 check_path "$DEST_DIR/scripts"
 
 for src in "$REPO_DIR/policies/"*; do
@@ -154,8 +155,38 @@ done
 python3 "$DEST_DIR/scripts/filter-sandbox-denies.py" "$CLAUDE_DIR/settings.json"
 
 # Convenience symlink: lets users and docs reference the default profile
-# at the same path as other (hypothetical) profiles under profiles/.
+# at the same path as other profiles under profiles/.
 ln -s "$CLAUDE_DIR" "$DEST_DIR/profiles/default"
+
+# Permissive profile installs as a real directory under profiles/permissive.
+# {{PROFILE_DIR}} for this profile resolves to $DEST_DIR/profiles/permissive.
+PERMISSIVE_DEST="$DEST_DIR/profiles/permissive"
+mkdir -p "$PERMISSIVE_DEST"
+src_perm="$REPO_DIR/profiles/permissive"
+for src in "$src_perm"/*; do
+    fname="$(basename "$src")"
+    if [[ -d "$src" ]]; then
+        cp -r "$src" "$PERMISSIVE_DEST/"
+    elif [[ "$fname" == *.template.* ]]; then
+        dest_name="${fname/.template./.}"
+        sed -e "s|{{PROFILE_DIR}}|$PERMISSIVE_DEST|g" -e "s|{{HOME}}|$HOME|g" \
+            "$src" > "$PERMISSIVE_DEST/$dest_name"
+    else
+        cp "$src" "$PERMISSIVE_DEST/$fname"
+    fi
+done
+for hook in "$PERMISSIVE_DEST/hooks/"*.sh; do
+    chmod +x "$hook"
+done
+# settings.json was produced by the template-copy loop above; this call
+# populates its sandbox.filesystem.denyRead and denyWrite arrays.
+python3 "$DEST_DIR/scripts/filter-sandbox-denies.py" "$PERMISSIVE_DEST/settings.json"
+
+# Record the active profile. Skipped if file already exists so a re-run
+# of the installer (after manual cleanup) does not reset a user's choice.
+if [[ ! -f "$DEST_DIR/active-profile" ]]; then
+    printf 'default\n' > "$DEST_DIR/active-profile"
+fi
 
 # -----------------------------------------------------------------------------
 DEST_DISPLAY="$(display_path "$DEST_DIR")"
@@ -167,8 +198,13 @@ Installed:
   $DEST_DISPLAY/
   $CLAUDE_DISPLAY/
 
-The default profile lives at $CLAUDE_DISPLAY. A convenience symlink
-at $DEST_DISPLAY/profiles/default points to it.
+Profiles:
+  default   — $CLAUDE_DISPLAY/  (active; strict deny list)
+  permissive — $DEST_DISPLAY/profiles/permissive/  (lighter floor for vigil-dev / vigil-yolo)
+
+Switch profiles with:
+  vigil set-default permissive
+  vigil set-default default
 
 If not already sourcing from your shell rc, add:
   [ -f $DEST_DISPLAY/vigil-aliases.sh ] && source $DEST_DISPLAY/vigil-aliases.sh

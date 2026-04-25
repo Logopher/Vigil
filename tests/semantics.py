@@ -15,9 +15,14 @@ MATCHER_RE = re.compile(r"^([A-Za-z]+)\((.*)\)$")
 
 REPO_DIR = Path(__file__).resolve().parent.parent
 PROFILE = REPO_DIR / "profiles" / "default" / "settings.template.json"
+PERMISSIVE = REPO_DIR / "profiles" / "permissive" / "settings.template.json"
 DEV = REPO_DIR / "policies" / "dev.template.json"
 STRICT = REPO_DIR / "policies" / "strict.template.json"
 YOLO = REPO_DIR / "policies" / "yolo.json"
+DEFAULT_HOOKS = REPO_DIR / "profiles" / "default" / "hooks"
+DEFAULT_AGENTS = REPO_DIR / "profiles" / "default" / "agents"
+PERMISSIVE_HOOKS = REPO_DIR / "profiles" / "permissive" / "hooks"
+PERMISSIVE_AGENTS = REPO_DIR / "profiles" / "permissive" / "agents"
 
 failed = False
 
@@ -290,8 +295,66 @@ def check_path_representation(profile: dict, policies: list[tuple[str, dict]]) -
                 fail(f"{name}: {bucket} entry '{entry}' contains {reason}")
 
 
+def check_permissive_structure(permissive: dict) -> None:
+    section("Permissive profile has expected top-level keys")
+    for key in ("sandbox", "permissions", "hooks"):
+        if key in permissive:
+            pass_(f"permissive has key: {key}")
+        else:
+            fail(f"permissive missing key: {key}")
+
+
+def check_permissive_subset(profile: dict, permissive: dict) -> None:
+    section("Permissive deny is a subset of default deny")
+    p_deny = set(deny_of(profile))
+    perm_deny = set(deny_of(permissive))
+    extras = sorted(perm_deny - p_deny)
+    if not extras:
+        pass_("permissive deny ⊆ default deny")
+    else:
+        for entry in extras:
+            fail(f"permissive has deny entry not in default: {entry}")
+
+
+def check_permissive_minimum_guards(permissive: dict) -> None:
+    section("Permissive profile retains minimum guards")
+    perm_deny = set(deny_of(permissive))
+    for guard in ("Bash(rm:*)", "Bash(sudo:*)", "Bash(vigil-install-review:*)"):
+        if guard in perm_deny:
+            pass_(f"permissive denies {guard}")
+        else:
+            fail(f"permissive missing minimum guard: {guard}")
+    spot = "Write({{HOME}}/.claude/settings.json)"
+    if spot in perm_deny:
+        pass_("permissive retains persistence-path Write deny (spot check)")
+    else:
+        fail(f"permissive missing persistence-path deny: {spot}")
+
+
+def check_hook_agent_drift() -> None:
+    section("Profile hook/agent parity (default vs. permissive)")
+    for label, default_dir, perm_dir in (
+        ("hooks", DEFAULT_HOOKS, PERMISSIVE_HOOKS),
+        ("agents", DEFAULT_AGENTS, PERMISSIVE_AGENTS),
+    ):
+        default_files = {p.name for p in default_dir.glob("*") if p.is_file()}
+        perm_files = {p.name for p in perm_dir.glob("*") if p.is_file()}
+        for name in sorted(default_files):
+            target = perm_dir / name
+            if name not in perm_files:
+                fail(f"permissive/{label}/{name} missing")
+                continue
+            if (default_dir / name).read_bytes() != target.read_bytes():
+                fail(f"permissive/{label}/{name} differs from default")
+            else:
+                pass_(f"{label}/{name} identical")
+        for name in sorted(perm_files - default_files):
+            fail(f"permissive/{label}/{name} has no counterpart in default")
+
+
 def main() -> int:
     profile = load(PROFILE)
+    permissive = load(PERMISSIVE)
     dev = load(DEV)
     strict = load(STRICT)
     yolo = load(YOLO)
@@ -303,8 +366,13 @@ def main() -> int:
     check_yolo_guards(yolo)
     check_allow_deny_noncontradiction(profile, policies)
     check_allow_deny_dead_rules(profile, policies)
-    check_path_representation(profile, policies)
-    check_deep_merge(profile, policies)
+    check_path_representation(profile, policies + [("permissive", permissive)])
+    check_deep_merge(profile, policies + [("permissive", permissive)])
+
+    check_permissive_structure(permissive)
+    check_permissive_subset(profile, permissive)
+    check_permissive_minimum_guards(permissive)
+    check_hook_agent_drift()
 
     return 1 if failed else 0
 

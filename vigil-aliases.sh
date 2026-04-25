@@ -83,7 +83,12 @@ _vigil_run_with_logging() (
 )
 
 vigil() {
-    _vigil_run_with_logging "$@"
+    if [[ "${1-}" == "set-default" ]]; then
+        shift
+        vigil_set_default "$@"
+        return
+    fi
+    _vigil_run_with_logging --settings "$HOME/.config/vigil/policies/strict.json" "$@"
 }
 
 vigil-dev() {
@@ -101,6 +106,131 @@ vigil-strict() {
 
 vigil-yolo() {
     _vigil_run_with_logging --settings "$HOME/.config/vigil/policies/yolo.json" "$@"
+}
+
+vigil_set_default() {
+    local force=0 target="" current_profile="default" raw_profile=""
+    local vigil_dir="$HOME/.config/vigil"
+    local target_bundle="" current_bundle="" staging="" tmp_profile=""
+    local dirty=() f="" dir="" arg=""
+
+    for arg in "$@"; do
+        case "$arg" in
+            --force) force=1 ;;
+            -*)
+                printf 'vigil set-default: unknown option: %s\n' "$arg" >&2
+                return 1
+                ;;
+            *)
+                if [[ -n "$target" ]]; then
+                    printf 'vigil set-default: unexpected argument: %s\n' "$arg" >&2
+                    return 1
+                fi
+                target="$arg"
+                ;;
+        esac
+    done
+
+    if [[ -z "$target" ]]; then
+        printf 'Usage: vigil set-default [--force] <profile>\n' >&2
+        printf 'Per-session override: CLAUDE_CONFIG_DIR=~/.config/vigil/profiles/<profile> vigil ...\n' >&2
+        return 1
+    fi
+
+    # Reject path-traversal and shell-metacharacter content in profile name.
+    if [[ ! "$target" =~ ^[a-zA-Z0-9-]+$ ]]; then
+        printf 'vigil set-default: invalid profile name: %s\n' "$target" >&2
+        return 1
+    fi
+
+    target_bundle="$vigil_dir/profiles/$target"
+
+    if [[ ! -f "$target_bundle/settings.json" ]]; then
+        printf 'vigil set-default: profile "%s" not found (expected %s/settings.json)\n' \
+            "$target" "$target_bundle" >&2
+        return 1
+    fi
+
+    if pgrep -x claude >/dev/null 2>&1; then
+        printf 'vigil set-default: Claude Code is running — close all sessions before switching profiles\n' >&2
+        return 1
+    fi
+    # Belt-and-suspenders open-files check; skipped silently if lsof is absent.
+    if command -v lsof >/dev/null 2>&1 && lsof +D "$HOME/.claude/" 2>/dev/null | grep -q .; then
+        printf 'vigil set-default: files under ~/.claude/ are open — close all sessions before switching profiles\n' >&2
+        return 1
+    fi
+
+    if [[ -f "$vigil_dir/active-profile" ]]; then
+        raw_profile="$(cat "$vigil_dir/active-profile")"
+        if [[ "$raw_profile" =~ ^[a-zA-Z0-9-]+$ ]]; then
+            current_profile="$raw_profile"
+        else
+            printf 'vigil set-default: active-profile contains invalid value "%s", treating as "default"\n' \
+                "$raw_profile" >&2
+        fi
+    fi
+
+    if [[ "$current_profile" == "$target" ]]; then
+        printf 'Already on profile: %s\n' "$target"
+        return 0
+    fi
+
+    # Diff check against current bundle.
+    # Skipped when current profile is "default": ~/.config/vigil/profiles/default
+    # is a symlink to ~/.claude/ so comparing live files against the bundle is
+    # comparing a file against itself — always identical regardless of edits.
+    if [[ "$current_profile" != "default" && $force -eq 0 ]]; then
+        current_bundle="$vigil_dir/profiles/$current_profile"
+        dirty=()
+        for f in settings.json CLAUDE.md; do
+            if [[ -f "$HOME/.claude/$f" ]] && \
+               ! diff -q "$HOME/.claude/$f" "$current_bundle/$f" >/dev/null 2>&1; then
+                dirty+=("$HOME/.claude/$f")
+            fi
+        done
+        for dir in hooks agents; do
+            if [[ -d "$HOME/.claude/$dir" ]] && \
+               ! diff -rq "$HOME/.claude/$dir" "$current_bundle/$dir" >/dev/null 2>&1; then
+                dirty+=("$HOME/.claude/$dir/")
+            fi
+        done
+        if [[ ${#dirty[@]} -gt 0 ]]; then
+            printf 'vigil set-default: local edits detected — copy them to the bundle or pass --force to overwrite:\n' >&2
+            printf '  %s\n' "${dirty[@]}" >&2
+            return 1
+        fi
+    fi
+
+    staging="$vigil_dir/staging"
+    [[ -n "$staging" ]] || { printf 'vigil set-default: internal error: empty staging path\n' >&2; return 1; }
+    rm -rf "$staging"
+    mkdir -p "$staging"
+    cp -r -- "$target_bundle/." "$staging/"
+
+    for f in settings.json CLAUDE.md; do
+        if [[ -f "$staging/$f" ]]; then
+            [[ -f "$HOME/.claude/$f" ]] && mv -- "$HOME/.claude/$f" "$HOME/.claude/$f.bak"
+            mv -- "$staging/$f" "$HOME/.claude/$f"
+            rm -f "$HOME/.claude/$f.bak"
+        fi
+    done
+    for dir in hooks agents; do
+        if [[ -d "$staging/$dir" ]]; then
+            [[ -d "$HOME/.claude/$dir" ]] && mv -- "$HOME/.claude/$dir" "$HOME/.claude/$dir.bak"
+            mv -- "$staging/$dir" "$HOME/.claude/$dir"
+            rm -rf "$HOME/.claude/$dir.bak"
+            chmod +x "$HOME/.claude/$dir/"*.sh 2>/dev/null || true
+        fi
+    done
+    rm -rf "$staging"
+
+    # Write active-profile atomically via temp-file rename.
+    tmp_profile="$(mktemp "$vigil_dir/.active-profile.XXXXXX")"
+    printf '%s\n' "$target" > "$tmp_profile"
+    mv -- "$tmp_profile" "$vigil_dir/active-profile"
+
+    printf 'Switched to profile: %s\n' "$target"
 }
 
 # Operator-only: install the per-repo pre-push review gate. Sandboxed

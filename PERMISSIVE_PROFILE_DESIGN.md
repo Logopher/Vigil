@@ -1,6 +1,6 @@
 # PERMISSIVE_PROFILE_DESIGN.md
 
-Design for the permissive profile and `vigil use <profile>` profile-swap command. These ship together as a single feature. For the current profile/policy model see `DESIGN.md`; for threat posture see `THREAT_MODEL.md`.
+Design for the permissive profile and `vigil set-default <profile>` profile-swap command. These ship together as a single feature. For the current profile/policy model see `DESIGN.md`; for threat posture see `THREAT_MODEL.md`.
 
 ## Problem
 
@@ -8,9 +8,9 @@ The default profile is strict by construction. Claude Code's permission-layer se
 
 ## Decision
 
-Keep the strict default profile intact. Add a **permissive profile** with a lighter floor that users opt into via `vigil use permissive`. Within the permissive profile, policies have room to express genuinely different postures.
+Keep the strict default profile intact. Add a **permissive profile** with a lighter floor that users opt into via `vigil set-default permissive`. Within the permissive profile, policies have room to express genuinely different postures.
 
-This is an explicit opt-out of strict behavior. Desktop-app and IDE-extension launches use whatever profile is installed at `~/.claude/`; users who have not run `vigil use permissive` are unaffected and retain full strict posture.
+This is an explicit opt-out of strict behavior. Desktop-app and IDE-extension launches use whatever profile is installed at `~/.claude/`; users who have not run `vigil set-default permissive` are unaffected and retain full strict posture.
 
 ## Architecture
 
@@ -48,7 +48,7 @@ This eliminates active-profile detection in the wrapper: `vigil` means "careful 
 
 `policies/strict.template.json` already mirrors the full default profile deny list. When loaded with the permissive profile the redundant entries (rm, sudo, persistence denies) are harmless. No change to the strict policy is required — it serves both profiles as-is.
 
-### `vigil use <profile>` command
+### `vigil set-default <profile>` command
 
 A new shell function in `vigil-aliases.sh`. (Can be promoted to a `vigil` CLI subcommand when the Stage 2 `vigil` CLI lands; shell function is the simpler path now.)
 
@@ -62,13 +62,13 @@ A new shell function in `vigil-aliases.sh`. (Can be promoted to a `vigil` CLI su
 6. Write `<target>` to `~/.config/vigil/active-profile`.
 7. Print `Switched to profile: <target>`.
 
-**Atomicity**: `mv` of individual files is not atomic across the set, but each individual file move is. A crash mid-swap leaves `~/.claude/` with a mix of old and new files; re-running `vigil use <target>` recovers because the staging copy is still valid and the source bundle is always intact.
+**Atomicity**: `mv` of individual files is not atomic across the set, but each individual file move is. A crash mid-swap leaves `~/.claude/` with a mix of old and new files; re-running `vigil set-default <target>` recovers because the staging copy is still valid and the source bundle is always intact.
 
-**Live-edit semantics**: If the user edits `~/.claude/CLAUDE.md` directly while the permissive profile is active, that edit lives in `~/.claude/` — not in the bundle. The diff check at step 4 catches this before the next `vigil use` clobbers it, prompting the user to either copy the edit into the bundle or pass `--force`.
+**Live-edit semantics**: If the user edits `~/.claude/CLAUDE.md` directly while the permissive profile is active, that edit lives in `~/.claude/` — not in the bundle. The diff check at step 4 catches this before the next `vigil set-default` clobbers it, prompting the user to either copy the edit into the bundle or pass `--force`.
 
 ### Dependency on `update.sh` manifest
 
-The original backlog framing listed `update.sh` manifest work as a prerequisite. That dependency is relaxed: `vigil use` handles its own "don't clobber local edits" concern via the diff check at swap time, without needing a hash manifest. `update.sh` manifest work remains valuable for the `update.sh` code path but does not block this feature.
+The original backlog framing listed `update.sh` manifest work as a prerequisite. That dependency is relaxed: `vigil set-default` handles its own "don't clobber local edits" concern via the diff check at swap time, without needing a hash manifest. `update.sh` manifest work remains valuable for the `update.sh` code path but does not block this feature.
 
 ## Files to create or modify
 
@@ -79,7 +79,7 @@ The original backlog framing listed `update.sh` manifest work as a prerequisite.
 - `profiles/permissive/agents/` — copies of `architect.md` and `code-reviewer.md`
 
 **Modified:**
-- `vigil-aliases.sh` — (a) add `vigil use <profile>` function; (b) change `vigil` and `vigil-strict` to pass `--settings ~/.config/vigil/policies/strict.json` unconditionally
+- `vigil-aliases.sh` — (a) add `vigil set-default <profile>` function; (b) change `vigil` and `vigil-strict` to pass `--settings ~/.config/vigil/policies/strict.json` unconditionally
 - `install.sh` — install the permissive bundle under `~/.config/vigil/profiles/permissive/`; write `~/.config/vigil/active-profile` → `"default"` on fresh install; skip the write if the file already exists (idempotent re-run)
 - `tests/semantics.py` — `check_baseline_consistency` asserts `profile.deny == strict.deny`; this still holds for the default profile, but the permissive profile's new invariant is `permissive.deny ⊂ strict.deny ⊂ default.deny`. Add a parameterized check or a second test for the permissive template.
 
@@ -92,11 +92,11 @@ The original backlog framing listed `update.sh` manifest work as a prerequisite.
 
 1. **`vigil-strict` alias fate.** Once `vigil` always applies strict, `vigil-strict` is redundant. Keep as alias (documents intent, preserves muscle memory) or remove (smaller surface). Recommend keeping.
 
-2. **`~/.config/vigil/active-profile` on pre-upgrade installs.** File will be absent on machines that installed before this feature shipped. The wrapper and `vigil use` should treat an absent file as `"default"` and not fail.
+2. **`~/.config/vigil/active-profile` on pre-upgrade installs.** File will be absent on machines that installed before this feature shipped. The wrapper and `vigil set-default` should treat an absent file as `"default"` and not fail.
 
 3. **Hooks and agents as copies vs. references.** The permissive profile needs identical hooks and agents to the default. Copies are correct per the copy-firewall design principle. A future change to `prune-worktrees.sh` must be applied to both profile bundles; a `diff -r profiles/default/hooks profiles/permissive/hooks` in the test suite or a Tier 1 static check would catch drift.
 
-4. **`vigil use` scope.** Should `vigil use` also update `CLAUDE_CONFIG_DIR` for the current shell (via `export CLAUDE_CONFIG_DIR=...`)? Probably not — `vigil use` is a persistent machine-level swap, not a per-session override. A session-scoped variant can be added later if needed.
+4. **`vigil set-default` scope.** Should `vigil set-default` also update `CLAUDE_CONFIG_DIR` for the current shell (via `export CLAUDE_CONFIG_DIR=...`)? Probably not — `vigil set-default` is a persistent machine-level swap, not a per-session override. A session-scoped variant can be added later if needed.
 
 ## What this supersedes
 

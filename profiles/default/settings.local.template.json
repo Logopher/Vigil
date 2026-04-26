@@ -107,6 +107,11 @@
             "type": "command",
             "command": "{{PROFILE_DIR}}/hooks/log-tool-use.sh",
             "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "{{PROFILE_DIR}}/hooks/validate-memory-write.sh",
+            "timeout": 5
           }
         ]
       }

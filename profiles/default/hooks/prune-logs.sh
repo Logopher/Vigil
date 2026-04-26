@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # prune-logs.sh — Session hook for ~/vigil-logs retention.
-# Runs at SessionStart. Deletes session-*.{log,txt} pairs older than
-# 90 days and trims total size to 2G, oldest-first. A 10-minute mtime
-# floor in the Python script protects the session that just started.
+# Runs at SessionStart. Deletes session-*.txt files (and any orphaned
+# .log companions) older than 90 days and trims total size to 2G,
+# oldest-first. A 10-minute mtime floor in the Python script protects
+# the session that just started.
 #
 # Cannot read VIGIL_LOG_DIR — the harness scrubs hook env vars — so
 # we rely on the script's default of ~/vigil-logs.

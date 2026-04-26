@@ -73,12 +73,15 @@ _vigil_run_with_logging() (
             ;;
     esac
 
-    # Post-process the raw script(1) capture into a readable .txt
-    # transcript alongside it. The .log keeps full TTY fidelity for
-    # replay; the .txt is for actual reading and grep-ability.
+    # Strip ANSI from the raw script(1) capture into a .txt companion,
+    # then discard the .log. Strip failure is reported on stderr; the
+    # .log is only removed on success so a failed strip leaves the raw
+    # file intact rather than nothing.
     local stripper="$HOME/.config/vigil/scripts/strip-ansi.py"
     if [[ -f "$stripper" && -f "$logfile" ]] && command -v python3 >/dev/null 2>&1; then
-        python3 "$stripper" "$logfile" "${logfile%.log}.txt" 2>/dev/null || true
+        python3 "$stripper" "$logfile" "${logfile%.log}.txt" \
+            && rm -f -- "$logfile" \
+            || echo "vigil: strip-ansi failed; raw log kept at $logfile" >&2
     fi
 )
 

@@ -61,6 +61,7 @@ add_if_exists() {
 
 add_if_exists "$DEST_DIR/vigil-aliases.sh"
 add_if_exists "$DEST_DIR/doctor.sh"
+add_if_exists "$DEST_DIR/active-profile"
 
 for src in "$REPO_DIR/policies/"*; do
     fname="$(basename "$src")"
@@ -90,8 +91,27 @@ for src in "$REPO_DIR/profiles/default/"*; do
         done < <(find "$src" -type f -print0)
     elif [[ "$fname" == *.template.* ]]; then
         add_if_exists "$CLAUDE_DIR/${fname/.template./.}"
+        add_if_exists "$CLAUDE_DIR/$fname"
     else
         add_if_exists "$CLAUDE_DIR/$fname"
+    fi
+done
+
+# Permissive profile contents. Mirrors the default loop above but targets
+# the bundle directory rather than $CLAUDE_DIR.
+PERMISSIVE_DEST="$DEST_DIR/profiles/permissive"
+for src in "$REPO_DIR/profiles/permissive/"*; do
+    fname="$(basename "$src")"
+    if [[ -d "$src" ]]; then
+        while IFS= read -r -d '' f; do
+            rel="${f#"$src"/}"
+            add_if_exists "$PERMISSIVE_DEST/$fname/$rel"
+        done < <(find "$src" -type f -print0)
+    elif [[ "$fname" == *.template.* ]]; then
+        add_if_exists "$PERMISSIVE_DEST/${fname/.template./.}"
+        add_if_exists "$PERMISSIVE_DEST/$fname"
+    else
+        add_if_exists "$PERMISSIVE_DEST/$fname"
     fi
 done
 
@@ -126,12 +146,16 @@ done
 # dirs, so user additions and runtime state are preserved automatically.
 # Subdirs under profiles/default/ are derived from the repo so new ones
 # (e.g., commands/) are picked up without editing this script.
-empty_dirs=("$DEST_DIR/policies" "$DEST_DIR/profiles")
+empty_dirs=("$DEST_DIR/policies")
 while IFS= read -r -d '' d; do
     rel="${d#"$REPO_DIR/scripts"}"
     empty_dirs+=("$DEST_DIR/scripts$rel")
 done < <(find "$REPO_DIR/scripts" -mindepth 1 -depth -type d -print0)
 empty_dirs+=("$DEST_DIR/scripts")
+for src in "$REPO_DIR/profiles/permissive/"*; do
+    [[ -d "$src" ]] && empty_dirs+=("$PERMISSIVE_DEST/$(basename "$src")")
+done
+empty_dirs+=("$PERMISSIVE_DEST" "$DEST_DIR/profiles")
 for src in "$REPO_DIR/profiles/default/"*; do
     [[ -d "$src" ]] && empty_dirs+=("$CLAUDE_DIR/$(basename "$src")")
 done

@@ -128,6 +128,8 @@ done
 # Default profile installs directly into ~/.claude. {{PROFILE_DIR}}
 # substitutes to $CLAUDE_DIR — the canonical path — so settings.json
 # hook references never require resolving through the symlink.
+# Templates are kept alongside their generated output so that
+# vigil set-default can regenerate settings.local.json after a swap.
 src_profile="$REPO_DIR/profiles/default"
 for src in "$src_profile"/*; do
     fname="$(basename "$src")"
@@ -136,6 +138,7 @@ for src in "$src_profile"/*; do
     elif [[ "$fname" == *.template.* ]]; then
         dest_name="${fname/.template./.}"
         sed -e "s|{{PROFILE_DIR}}|$CLAUDE_DIR|g" -e "s|{{HOME}}|$HOME|g" "$src" > "$CLAUDE_DIR/$dest_name"
+        cp "$src" "$CLAUDE_DIR/$fname"
     else
         cp "$src" "$CLAUDE_DIR/$fname"
     fi
@@ -171,6 +174,7 @@ for src in "$src_perm"/*; do
         dest_name="${fname/.template./.}"
         sed -e "s|{{PROFILE_DIR}}|$PERMISSIVE_DEST|g" -e "s|{{HOME}}|$HOME|g" \
             "$src" > "$PERMISSIVE_DEST/$dest_name"
+        cp "$src" "$PERMISSIVE_DEST/$fname"
     else
         cp "$src" "$PERMISSIVE_DEST/$fname"
     fi

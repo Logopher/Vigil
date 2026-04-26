@@ -153,7 +153,13 @@ while IFS= read -r f; do
         fail "unreplaced template marker in $f"
         leak=1
     fi
-done < <(find "$home/.config/vigil" "$home/.claude" -type f \( -name '*.json' -o -name '*.sh' -o -name '*.md' \) 2>/dev/null)
+done < <(find "$home/.config/vigil" "$home/.claude" -type f \
+    \( -name '*.json' -o -name '*.sh' -o -name '*.md' \) \
+    ! -name '*.template.*' \
+    ! -name 'vigil-aliases.sh' 2>/dev/null)
+# vigil-aliases.sh is excluded above: it contains {{PROFILE_DIR}} and
+# {{HOME}} as literal sed find-patterns inside vigil_set_default, not
+# as unsubstituted template markers.
 [[ $leak -eq 0 ]] && pass "no unreplaced {{...}} markers in installed files"
 
 # Positive checks: substituted values actually appear where expected.
@@ -164,11 +170,15 @@ else
 fi
 
 # {{PROFILE_DIR}} substitutes to $HOME/.claude (canonical), not the symlink.
-if grep -q "$home/.claude/hooks/prune-worktrees.sh" "$home/.claude/settings.json"; then
-    pass "{{PROFILE_DIR}} substituted to ~/.claude in settings.json"
+if grep -q "$home/.claude/hooks/prune-worktrees.sh" "$home/.claude/settings.local.json"; then
+    pass "{{PROFILE_DIR}} substituted to ~/.claude in settings.local.json"
 else
-    fail "{{PROFILE_DIR}} not substituted to ~/.claude in settings.json"
+    fail "{{PROFILE_DIR}} not substituted to ~/.claude in settings.local.json"
 fi
+check_file "settings.local.template.json retained in default bundle" \
+    "$home/.claude/settings.local.template.json"
+check_file "settings.local.template.json retained in permissive bundle" \
+    "$home/.config/vigil/profiles/permissive/settings.local.template.json"
 
 # -----------------------------------------------------------------------------
 section "denyRead filtered to extant paths"

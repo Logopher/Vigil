@@ -174,10 +174,14 @@ print(json.dumps({
         # policy name to a safe character class before embedding it.
         if [[ "$active_policy" =~ ^[a-zA-Z0-9_-]+$ && -f "$_txtfile" ]]; then
             local _tmp=""
-            _tmp=$(mktemp) \
-                && { printf '# vigil-policy: %s\n' "$active_policy"; cat "$_txtfile"; } > "$_tmp" \
-                && mv -- "$_tmp" "$_txtfile" \
-                || { [[ -n "$_tmp" ]] && rm -f -- "$_tmp"; }
+            if _tmp=$(mktemp); then
+                if { printf '# vigil-policy: %s\n' "$active_policy"; cat "$_txtfile"; } > "$_tmp" \
+                        && mv -- "$_tmp" "$_txtfile"; then
+                    : # prepend succeeded
+                else
+                    rm -f -- "$_tmp"
+                fi
+            fi
         fi
     fi
 )

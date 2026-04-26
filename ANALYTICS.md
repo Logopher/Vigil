@@ -45,11 +45,37 @@ Code's local JSONL logs — no API call required for the data, only for current 
   agents per commit) adds predictable subagent cost. ccusage makes that overhead legible,
   which is useful for users evaluating whether the gate is worth the spend.
 
+### JSONL schema
+
+Each file under `~/.claude/projects/<encoded-path>/<uuid>.jsonl` is a newline-delimited
+session record. The `<encoded-path>` directory name is the project's absolute path with
+slashes replaced by hyphens (e.g. `/home/grault/code/claude-config` →
+`-home-grault-code-claude-config`). Lines with `"type": "assistant"` carry a
+`message.usage` object:
+
+```json
+{
+  "input_tokens": 1,
+  "cache_creation_input_tokens": 1080,
+  "cache_read_input_tokens": 111016,
+  "output_tokens": 101
+}
+```
+
+with `message.model` at the top level of the assistant entry. Summing across all assistant
+lines per model and applying Anthropic pricing yields exact per-session cost — bypassing
+ccusage's project-level aggregation, which does not break out individual main sessions.
+The join script reads JSONL directly; ccusage is only needed as a pricing reference or
+for project-level spot-checks.
+
+Additional fields present on every JSONL entry: `timestamp` (ISO-8601 with milliseconds),
+`sessionId` (UUID matching the filename), `gitBranch`, `slug` (human-readable session
+description derived from the first message).
+
 ### Limits
 
-ccusage shows *what* was spent, not *why*. A high-cost session may reflect a large task,
-mismanaged context, or the wrong model for the job — distinguishing these requires reading
-the session log. ccusage is a triage signal, not a root cause.
+ccusage shows *what* was spent by project, not by individual main session. Its `lastActivity`
+field is date-only. For per-session cost attribution, read the JSONL directly (see above).
 
 ---
 
@@ -106,79 +132,90 @@ touched a line is the best available candidate, not a proven cause.
 
 ### What they contain
 
-Session logs are `script(1)` TTY captures written to `~/vigil-logs/` by `vigil-aliases.sh`.
-Each session produces two files: `session-<timestamp>.log` (raw capture, full fidelity) and
-`session-<timestamp>.txt` (ANSI-stripped companion produced by `scripts/strip-ansi.py`).
-The `.txt` file is what `vigil-log` and `vigil-review` read.
+Session logs are written to `~/vigil-logs/` by `vigil-aliases.sh`. Each session produces
+two files:
+
+- `session-<timestamp>-<repo>-<branch>.txt` — ANSI-stripped transcript, prefixed with a
+  `# vigil-policy: <name>` header line.
+- `session-<timestamp>-<repo>-<branch>.json` — sidecar metadata (see below).
+
+The raw `script(1)` `.log` capture is discarded after successful stripping; on strip
+failure the `.log` is kept and no `.txt` is produced (the sidecar `.json` is still written).
+The join script must handle this `.log`-present / `.txt`-absent state. Sessions started
+outside a git repository, or in a detached HEAD state, fall back to the timestamp-only
+filename format (`session-<timestamp>.{txt,json}`). Branch names are sanitized to
+`[a-zA-Z0-9._-]` — slashes become hyphens (e.g. `feat/foo` → `feat-foo`).
+
+Retention is 180 days and 2G total, enforced at session start by `hooks/prune-logs.sh`.
+
+### Sidecar metadata
+
+The `.json` sidecar is written after each session and contains:
+
+```json
+{
+  "cwd": "/home/grault/code/claude-config",
+  "git_branch": "main",
+  "git_head": "<sha-at-session-start>",
+  "active_policy": "strict",
+  "started_at": "2026-04-26T05:55:51",
+  "ccusage_jsonl": "/home/grault/.claude/projects/-home-grault-code-claude-config/<uuid>.jsonl"
+}
+```
+
+`git_head` and `git_branch` are captured before the session starts, reflecting the repo
+state Claude operated against. `started_at` is local time with no timezone offset, derived from the same
+`VIGIL_SESSION_ID` string as the filename, so the two always match. Cross-machine or
+DST-boundary timestamp comparisons require awareness of the recording machine's timezone. `ccusage_jsonl` is the most recently modified JSONL under
+`~/.claude/projects/` at session end, an approximation accurate for single-session
+workloads; concurrent sessions may alias to the wrong file.
 
 ### Role in observability
 
 Session logs are the narrative layer that bridges pyszz and ccusage. pyszz identifies
-inducing commits by timestamp; ccusage measures token spend by session. Session logs describe
-what was happening during a session — what was being prompted, what context Claude was
-operating in, what decisions were made. Neither pyszz nor ccusage provides this.
+inducing commits by timestamp; the JSONL files measure token spend per session. Session logs
+describe what was happening — what was being prompted, what context Claude was operating in,
+what decisions were made. Neither pyszz nor ccusage provides this.
 
-- **pyszz bridge**: An inducing commit's author timestamp can be matched against the session
-  log covering that time window. The `.txt` companion then provides the session narrative for
-  post-mortem analysis: what was being built, what prompts drove the commit, whether the
-  session showed warning signs.
-- **ccusage bridge**: A high-spend session identified by ccusage can be correlated to its
-  session log to diagnose why the session was expensive — large file reads, long planning
-  loops, multi-round subagent orchestration, or an unproductive context.
+- **pyszz bridge**: An inducing commit's author timestamp can be matched against the sidecar
+  `started_at` covering that window. The `.txt` companion then provides the session narrative
+  for post-mortem analysis.
+- **ccusage bridge**: The sidecar's `ccusage_jsonl` path points directly to the session's
+  JSONL file. Token counts can be read from that file without going through ccusage's
+  project-level aggregation.
 
-### Current gap
+### Remaining gap
 
-No explicit identifier links `~/vigil-logs/session-<timestamp>` files to the corresponding
-`~/.claude/projects/*.jsonl` session entries. The join currently relies on timestamp
-proximity, which is ambiguous when multiple sessions are active near the same time. The
-per-tool-call logging hook (`PreToolUse`/`PostToolUse`, tracked in `BACKLOG.md`) is the
-eventual fix: it can write a session ID directly into the log. The improvements below reduce
-the ambiguity without depending on that hook.
-
-### Log improvement opportunities
-
-`vigil-aliases.sh` runs in the user's full shell environment before `script(1)` starts,
-giving it access to context that hooks cannot reach (the harness strips env vars before
-invoking hook subprocesses). The following improvements require only alias-wrapper changes:
-
-- **Sidecar metadata file.** Write `session-<timestamp>.json` alongside each log pair,
-  recording `cwd`, `git_branch`, `git_head`, `active_policy`, and session start timestamp.
-  Gives pyszz exact repo state at session start; gives ccusage a cross-reference to the
-  working directory. Eliminates fuzzy timestamp matching for JSONL correlation once
-  post-session linkage is added.
-- **Richer log filenames.** Append the git branch or repository basename to the session
-  filename (e.g., `session-<timestamp>-claude-config-main`). Makes log browsing useful
-  without opening files; enables shell-level filtering by project.
-- **Policy marker in the log.** The alias wrapper knows which entry point was invoked
-  (`vigil`, `vigil-dev`, `vigil-yolo`). Prepending a single line to the `.txt` companion
-  before `script(1)` runs makes the log self-describing.
-- **Post-session JSONL linkage.** After `script(1)` exits, scan `~/.claude/projects/` for
-  the most recently modified JSONL file and record its path in the sidecar JSON. This is an
-  approximation — the most recently modified file is almost always the session that just
-  ended — but closes the ccusage correlation gap without requiring the per-tool-call hook
-  architecture.
+No exact identifier links `~/vigil-logs/session-*` files to the corresponding
+`~/.claude/projects/*.jsonl` entries. The `ccusage_jsonl` approximation closes most of the
+gap, but concurrent sessions can alias. The per-tool-call logging hook
+(`PreToolUse`/`PostToolUse`, tracked in `BACKLOG.md`) is the eventual fix: it can write a
+session ID directly into the log. Until then, the approximation is reliable for the typical
+single-session workload.
 
 ---
 
 ## Integration opportunity
 
-The most valuable capability none of these tools currently provides is **session-to-commit
-attribution**: connecting a bug-inducing commit (from pyszz) back to the Claude session that
-produced it (from session logs) and the cost of that session (from ccusage). This answers
-"which sessions introduced the most bugs?" and "what was the cost of sessions that required
-the most downstream fixes?" — the combined observability question no single tool answers.
+All enabling dependencies are now in place. The join script (`scripts/join-sessions.py`,
+not yet implemented) connects pyszz's bug attribution to session cost:
 
-The near-term integration target, requiring no modification to either external tool:
+1. Run pyszz → inducing commit SHAs with **author** timestamps (preserved by normal
+   `git rebase`; may shift under `--reset-author`, `filter-branch`, or `filter-repo`).
+2. Read sidecar `.json` files from `~/vigil-logs/` — each has `started_at`, `git_head`,
+   `ccusage_jsonl`.
+3. For each inducing commit, find the sidecar whose `started_at` is closest without
+   exceeding the author timestamp (the session most likely to have produced the commit).
+   `git_head` provides a stronger signal when the inducing commit was HEAD at session start.
+4. Open the sidecar's `ccusage_jsonl` file; sum `message.usage` token counts from
+   `type: "assistant"` lines per model; apply Anthropic pricing to get per-session cost.
+5. Output: `{inducing_sha, fix_sha, session_file, session_started_at, session_git_head,
+   session_cost_usd}`.
 
-1. Run pyszz to produce inducing commit SHAs with author timestamps.
-2. Run `ccusage session --json` to produce per-session cost records with timestamps.
-3. Write a join script that matches each inducing commit timestamp against the session log
-   covering that window (using the sidecar `.json` metadata if present, falling back to
-   filename timestamp), then pulls the session's cost from the ccusage output.
-
-The sidecar metadata file (described above) is the enabling dependency: it makes the
-timestamp join precise and adds git state, so the output is "commit X was introduced in
-session Y, which cost $Z, at git HEAD W." That is the full attribution record.
+The join script needs a pricing table as an input (or a small bundled default). Prices
+change occasionally; a `--pricing` JSON argument is cleaner than hardcoding. The `slug`
+field present in each JSONL entry provides a human-readable session label for the output.
 
 Once the per-tool-call hook lands and writes an explicit session ID into each log, the
-timestamp join can be replaced with a direct key lookup.
+timestamp join can be replaced with a direct key lookup, and the `ccusage_jsonl`
+approximation can be retired.

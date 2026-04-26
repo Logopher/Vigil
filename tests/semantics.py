@@ -5,6 +5,7 @@ allow/deny non-contradiction, and that the shipped policies compose
 cleanly with the profile.
 """
 import difflib
+import fnmatch
 import json
 import re
 import sys
@@ -367,6 +368,75 @@ def check_hook_agent_drift() -> None:
             fail(f"permissive/{label}/{name} has no counterpart in default")
 
 
+EXCLUDED_COMMANDS_REQUIRED = [
+    "git commit *",
+    "git tag *",
+    "git -C * commit *",
+    "git -C * tag *",
+    "git verify-commit *",
+    "git verify-tag *",
+]
+
+# (pattern, command, should_match)
+# Tests our assumption that the harness uses fnmatch-style glob matching where
+# `*` matches any sequence including spaces. Mid-string wildcard behaviour
+# (e.g. "git -C * commit *") is the verification gap documented in
+# THREAT_MODEL.md — these cases fail fast if the assumption turns out wrong.
+EXCLUDED_COMMANDS_GLOB_CASES: list[tuple[str, str, bool]] = [
+    ("git commit *",        "git commit --amend",                     True),
+    ("git commit *",        "git commit -m 'initial commit'",         True),
+    ("git commit *",        "git commit -S --amend",                  True),
+    ("git tag *",           "git tag v1.0.0",                         True),
+    ("git tag *",           "git tag -s v1.0.0 -m 'release'",        True),
+    ("git -C * commit *",   "git -C /home/user/repo commit --amend",  True),
+    ("git -C * commit *",   "git -C ../other-repo commit -m 'msg'",   True),
+    ("git -C * tag *",      "git -C /home/user/repo tag v1.0.0",      True),
+    ("git -C * tag *",      "git -C ../repo tag -s v1.0.0",           True),
+    ("git verify-commit *", "git verify-commit abc1234",              True),
+    ("git verify-commit *", "git verify-commit HEAD",                 True),
+    ("git verify-tag *",    "git verify-tag v1.0.0",                  True),
+    # Must NOT match unrelated subcommands
+    ("git commit *",        "git status",                             False),
+    ("git tag *",           "git push --tags",                        False),
+    ("git -C * commit *",   "git commit --amend",                     False),
+    ("git -C * tag *",      "git tag v1.0.0",                         False),
+    ("git verify-commit *", "git verify-tag abc",                     False),
+    ("git verify-tag *",    "git verify-commit abc1234",              False),
+]
+
+
+def check_excluded_commands_present() -> None:
+    section("excludedCommands: required signing patterns present")
+    for label, settings_path in (
+        ("default", PROFILE_DIR / "settings.json"),
+        ("permissive", PERMISSIVE_DIR / "settings.json"),
+    ):
+        settings = load(settings_path)
+        excluded = settings.get("sandbox", {}).get("excludedCommands", [])
+        for pat in EXCLUDED_COMMANDS_REQUIRED:
+            if pat in excluded:
+                pass_(f"{label}: excludedCommands has '{pat}'")
+            else:
+                fail(f"{label}: excludedCommands missing '{pat}'")
+
+
+def check_excluded_commands_glob_semantics() -> None:
+    section("excludedCommands: mid-string glob semantics (fnmatch assumption)")
+    # fnmatch treats `*` as matching any sequence including spaces, which is
+    # the semantics required for mid-string patterns like "git -C * commit *".
+    # If the harness uses a different matching strategy (prefix-only, shell
+    # glob where `*` won't cross spaces, etc.) some True cases below will be
+    # unreachable and the verification gap in THREAT_MODEL.md applies.
+    for pat, cmd, expected in EXCLUDED_COMMANDS_GLOB_CASES:
+        actual = fnmatch.fnmatch(cmd, pat)
+        if actual == expected:
+            sign = "matches" if expected else "does not match"
+            pass_(f"'{pat}' {sign} '{cmd}'")
+        else:
+            direction = "should match" if expected else "should not match"
+            fail(f"'{pat}' {direction} '{cmd}' (fnmatch returned {actual})")
+
+
 def main() -> int:
     profile = load_profile(PROFILE_DIR)
     permissive = load_profile(PERMISSIVE_DIR)
@@ -388,6 +458,9 @@ def main() -> int:
     check_permissive_subset(profile, permissive)
     check_permissive_minimum_guards(permissive)
     check_hook_agent_drift()
+
+    check_excluded_commands_present()
+    check_excluded_commands_glob_semantics()
 
     return 1 if failed else 0
 

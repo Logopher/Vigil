@@ -22,9 +22,9 @@ All other command denies (git mutations, network fetchers, runtimes, credential 
 
 A `PreToolUse` hook rejects `Write`, `Edit`, and `MultiEdit` calls targeting `~/.claude/projects/<other-slug>/memory/**`. Writes to the current session's own project slug are allowed. This is enforced at runtime by `validate-memory-write.sh` and is not visible in the static permission layer.
 
-### `git -C` breaks the `git commit` / `git tag` carve-out
+### Signing commands run outside the sandbox
 
-The sandbox carves out `git commit` and `git tag` (via `excludedCommands` in `settings.json`) so they can reach the signing agent outside the sandbox. The matcher is prefix-based on the command line, so `git -C <path> commit …` does not match — it runs inside the sandbox and typically fails (no access to `SSH_AUTH_SOCK` or signing keys). When you need to commit or tag from somewhere other than the current working directory, `cd` into the repo first; do not reach for `-C`.
+`git commit`, `git tag`, `git -C <path> commit`, `git -C <path> tag`, `git verify-commit`, and `git verify-tag` are listed in `excludedCommands` and run outside bubblewrap with host-level filesystem and network access. The `commit` and `tag` variants fire hook subprocesses (`pre-commit`, `prepare-commit-msg`, `commit-msg`, `post-commit`) that share that reach; `verify-commit` and `verify-tag` do not. See `THREAT_MODEL.md` for the blast-radius analysis.
 
 ## Collaboration rules
 

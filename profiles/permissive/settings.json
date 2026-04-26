@@ -6,7 +6,14 @@
     "allowUnsandboxedCommands": false,
     "enableWeakerNestedSandbox": false,
     "enableWeakerNetworkIsolation": false,
-    "excludedCommands": ["git commit *", "git tag *"],
+    "excludedCommands": [
+      "git commit *",
+      "git tag *",
+      "git -C * commit *",
+      "git -C * tag *",
+      "git verify-commit *",
+      "git verify-tag *"
+    ],
     "filesystem": {},
     "network": {
       "allowedDomains": [],

@@ -69,6 +69,38 @@ _vigil_run_with_logging() (
         _prev="$_arg"
     done
 
+    # Write session marker so hooks can read session context — the harness
+    # strips shell-exported env vars before invoking hook subprocesses.
+    # Hooks are read-only consumers of this file; the sandbox deny list
+    # blocks any in-process Write tool from modifying it.
+    # Concurrent vigil sessions are not supported: a second session silently
+    # overwrites this file (vigil set-default guards via pgrep; no such guard
+    # runs here — callers are expected not to stack sessions).
+    local _session_file="$HOME/.config/vigil/.vigil-session"
+    local _session_tmp _launched_at _safe_policy=""
+    _launched_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+    # Validate active_policy before embedding: it is user-supplied via --settings.
+    # VIGIL_SESSION_ID (date format) and _launched_at (ISO 8601) are safe as-is.
+    # VIGIL_LOG_DIR is derived from $HOME which has no JSON-unsafe chars on Linux.
+    [[ "$active_policy" =~ ^[a-zA-Z0-9_-]+$ ]] && _safe_policy="$active_policy"
+    # Atomic write (temp + rename) prevents partial-read by a hook that fires
+    # immediately at SessionStart. Trap registered only on successful write so
+    # a failed mktemp does not delete a surviving concurrent session's marker.
+    # Function runs in a subshell (...) — EXIT fires when the whole session
+    # ends, after script(1) returns and all post-processing completes.
+    if _session_tmp="$(mktemp "$HOME/.config/vigil/.vigil-session.XXXXXX" 2>/dev/null)"; then
+        if printf '{\n  "session_id": "%s",\n  "log_dir": "%s",\n  "policy": "%s",\n  "launched_at": "%s"\n}\n' \
+                "$VIGIL_SESSION_ID" "$VIGIL_LOG_DIR" "$_safe_policy" "$_launched_at" \
+                > "$_session_tmp" \
+            && mv -- "$_session_tmp" "$_session_file"; then
+            trap 'rm -f -- "$_session_file"' EXIT
+        else
+            rm -f -- "$_session_tmp"
+        fi
+    else
+        echo "vigil: warning: could not create session marker in ~/.config/vigil/ — hooks will run without session context" >&2
+    fi
+
     # Capture git state before the session starts so the sidecar reflects
     # the repo state Claude was operating against, not the post-session state.
     # _git_repo and _git_branch also form the filename suffix for browsability.

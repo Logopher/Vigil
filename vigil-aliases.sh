@@ -96,18 +96,26 @@ _vigil_run_with_logging() (
 
     # Write sidecar metadata JSON. started_at is derived from VIGIL_SESSION_ID
     # (local time, no timezone suffix) so it matches the filename even if the
-    # session ran past midnight.
+    # session ran past midnight. ccusage_jsonl is the most recently modified
+    # JSONL file under ~/.claude/projects/ — an approximation for the session
+    # that just ended, accurate enough until per-tool-call hooks land.
     if command -v python3 >/dev/null 2>&1; then
         local _sid="$VIGIL_SESSION_ID"
         local _started_at="${_sid:0:4}-${_sid:4:2}-${_sid:6:2}T${_sid:9:2}:${_sid:11:2}:${_sid:13:2}"
         python3 -c "
-import json, sys
+import json, sys, os, glob as _g
+files = _g.glob(os.path.expanduser('~/.claude/projects/**/*.jsonl'), recursive=True)
+try:
+    ccusage_jsonl = max(files, key=os.path.getmtime) if files else ''
+except OSError:
+    ccusage_jsonl = ''
 print(json.dumps({
-    'cwd':          sys.argv[1],
-    'git_branch':   sys.argv[2],
-    'git_head':     sys.argv[3],
-    'active_policy':sys.argv[4],
-    'started_at':   sys.argv[5],
+    'cwd':           sys.argv[1],
+    'git_branch':    sys.argv[2],
+    'git_head':      sys.argv[3],
+    'active_policy': sys.argv[4],
+    'started_at':    sys.argv[5],
+    'ccusage_jsonl': ccusage_jsonl,
 }, indent=2))
 " "$PWD" "$_git_branch" "$_git_head" "$active_policy" "$_started_at" \
             > "${logfile%.log}.json" 2>/dev/null || true

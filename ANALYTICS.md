@@ -197,8 +197,8 @@ single-session workload.
 
 ## Integration opportunity
 
-All enabling dependencies are now in place. The join script (`scripts/join-sessions.py`,
-not yet implemented) connects pyszz's bug attribution to session cost:
+All enabling dependencies are now in place. The join script (`scripts/join-sessions.py`)
+connects pyszz's bug attribution to session cost:
 
 1. Run pyszz → inducing commit SHAs with **author** timestamps (preserved by normal
    `git rebase`; may shift under `--reset-author`, `filter-branch`, or `filter-repo`).

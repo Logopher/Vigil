@@ -13,13 +13,16 @@ To get *value* from the tool — installing it, picking a policy, running sessio
 To *modify* the tool — writing your own deny rules, adding a profile, tweaking sandbox config:
 
 - **Comfort reading and editing JSON.** No GUI, no wizard. The schema is small but you need to be willing to look at it.
-- **A working mental model of shell hooks and environment variables.** You don't need to write them; you need to not panic when they appear in the config.
+- **A working mental model of shell hooks and environment variables.** The hooks themselves are thin bash shims; they delegate to Python scripts in `scripts/`. You don't need to write either, but extending a hook means reading both.
+- **Basic Python literacy for hook extensions.** The logging and validation hooks are standalone Python scripts that read JSON from stdin and write JSON to stdout. Reading them is straightforward; modifying them requires comfort with Python's `json` and `os.path` modules.
 
 ## Sweet spot
 
 A developer who has had a moment of *"wait, why did Claude just do that?"* — has thought about agent safety enough to want a baseline, but hasn't wanted to design one from scratch. Mid-to-senior, comfortable in the terminal, security-aware without being a specialist.
 
 The conceptual split between profile (identity, hooks, sandbox) and policy (posture: strict / dev / yolo) clicks quickly for this reader, because they've seen the same split elsewhere — AWS profiles, browser profiles, IAM policies.
+
+A second variant of the sweet-spot reader: a developer who wants to *understand* what their AI agent is doing across sessions, not just constrain it. The tool now produces per-session transcripts and sidecar JSON, plus a per-call tool-use log (`tools-<session>.jsonl`) that records every tool invocation with its input and response. `scripts/join-sessions.py` joins those logs with Claude Code's JSONL usage data for cost attribution. `ANALYTICS.md` documents the full observability picture for this reader.
 
 ## Above the sweet spot
 

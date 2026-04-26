@@ -10,7 +10,7 @@ Repo layout:
 
 - `profiles/<name>/` — per-profile bundle: `settings.json`, `settings.local.template.json`, `CLAUDE.md`, `hooks/*.sh`. The default profile is strict-by-construction.
 - `policies/<name>.json` — permission overlays invoked per session via `claude --settings ~/.config/vigil/policies/<name>.json`. Current set: `strict`, `dev`, `yolo`.
-- `vigil-aliases.sh` — sourced from `~/.bashrc` (from the installed copy at `~/.config/vigil/vigil-aliases.sh`); wraps the `claude` CLI with `script(1)` and exposes `vigil`, `vigil-dev`, `vigil-strict`, `vigil-yolo`, and `vigil-log*` entry points. Session transcripts land under `~/vigil-logs/` as a pair per session: `session-<timestamp>.log` is the raw `script(1)` TTY capture (full fidelity, for replay), and `session-<timestamp>.txt` is the ANSI-stripped readable companion produced by `scripts/strip-ansi.py` (what `vigil-log` and `vigil-review` read).
+- `vigil-aliases.sh` — sourced from `~/.bashrc` (from the installed copy at `~/.config/vigil/vigil-aliases.sh`); wraps the `claude` CLI with `script(1)` and exposes `vigil`, `vigil-dev`, `vigil-strict`, `vigil-yolo`, and `vigil-log*` entry points. Each session writes `~/vigil-logs/session-<timestamp>-<repo>-<branch>.txt` (ANSI-stripped transcript with a `# vigil-policy` header) and a companion `.json` sidecar (cwd, git branch/head, active policy, start time, ccusage link). The raw `script(1)` `.log` is discarded after successful stripping.
 - `install.sh` — copy-based installer; refuses to run if any destination node already exists.
 
 ## Architecture
@@ -25,11 +25,14 @@ A non-default profile is selected by setting `CLAUDE_CONFIG_DIR` for the session
 Hooks registered in the default profile:
 
 - `SessionStart` / `SessionEnd` → `hooks/prune-worktrees.sh`
-- `SessionStart` → `hooks/prune-logs.sh` (retention for `~/vigil-logs/`; defaults 90d age, 2G cap)
+- `SessionStart` → `hooks/prune-logs.sh` (retention for `~/vigil-logs/`; defaults 180d age, 2G cap)
+- `SessionStart` → `hooks/policy-banner.sh` (prints active policy and session ID to stderr)
+- `PreToolUse` / `PostToolUse` → `hooks/log-tool-use.sh` + `scripts/log-tool-use.py` (appends JSONL record per call to `~/vigil-logs/tools-<session>.jsonl`)
+- `PreToolUse` → `hooks/validate-memory-write.sh` + `scripts/validate-memory-write.py` (blocks `Write`/`Edit`/`MultiEdit` targeting another project's `memory/` directory)
 
 Hook paths in the template use the `{{PROFILE_DIR}}` placeholder; the installer substitutes the installed profile directory when generating `settings.local.json`.
 
-Per-tool-call logging hooks (`PreToolUse`/`PostToolUse`) ship in `profiles/*/hooks/log-tool-use.sh`; they read session context from ~/.config/vigil/.vigil-session rather than env vars. Session-level transcripts are still captured via `script(1)` from the shell wrappers in `vigil-aliases.sh`.
+All hooks read session context from `~/.config/vigil/.vigil-session` (written by `vigil-aliases.sh` at launch; the harness strips shell-exported env vars before invoking hook subprocesses). Session-level transcripts are captured via `script(1)` from the shell wrappers in `vigil-aliases.sh`.
 
 The sandbox `denyRead` and `denyWrite` lists are *not* defined in `settings.json`. Their authoritative source is the master tuples (`MASTER_DENY_READ`, `MASTER_DENY_WRITE`) at the top of `scripts/filter-sandbox-denies.py`. The installer invokes that script after writing `settings.json`; the script overwrites the two arrays with the master entries that currently pass bubblewrap's mount-target type check. To change the desired deny set, edit the Python source — not the JSON files. The script is safe to re-run standalone (e.g., after installing a new CLI that creates `~/.aws/`) to refresh the lists without a full reinstall.
 

@@ -142,7 +142,7 @@ Using this tool in its default configuration, an attacker who achieves prompt in
 - Read any non-sensitive file within the current project.
 - Commit changes to the local git repository.
 - Invoke any allowed build/test tool (in `dev`) with arbitrary arguments.
-- Write to the current project's auto-memory, influencing future sessions in the same project. Cross-project memory writes are also reachable today; a scope-validation hook to close that case is tracked in `BACKLOG.md`.
+- Write to the current project's auto-memory, influencing future sessions in the same project. Cross-project memory writes are blocked by `hooks/validate-memory-write.sh`, which compares the target path's project slug against the calling session's CWD-derived slug and denies mismatches via a `PreToolUse` decision.
 
 An attacker cannot plausibly (without further misconfiguration):
 

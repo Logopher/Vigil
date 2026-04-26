@@ -127,13 +127,16 @@ The goal is *user-owned, readable conversation history*. Anything else (debuggin
 
 ### How it works
 
-Both session wrappers pipe Claude through `script(1)`, which captures every byte the TUI writes to `~/vigil-logs/session-<timestamp>.log`. The wrapper branches on `uname` for platform-correct `script(1)` flags (BSD and util-linux differ).
+Both session wrappers pipe Claude through `script(1)`, which captures every byte the TUI writes. The wrapper branches on `uname` for platform-correct `script(1)` flags (BSD and util-linux differ).
 
-The raw `.log` is faithful to the terminal — `cat` it in a real TTY and the session re-renders, escape codes and all — but it is not readable as a transcript. Every cursor move and color change is in the byte stream.
+Each session produces two files under `~/vigil-logs/`:
 
-After `script` returns, the wrapper post-processes the `.log` into a parallel `.txt` via `scripts/strip-ansi.py`. The `.txt` is a plain transcript: ANSI sequences, charset selections, terminal-control characters, bare carriage returns, and runs of blank lines are stripped or collapsed. This is what the user reads or greps. Both files are kept; the `.log` for full fidelity, the `.txt` for the actual purpose.
+- `session-<timestamp>-<repo>-<branch>.txt` — ANSI-stripped transcript, prepended with a `# vigil-policy: <name>` header. This is what `vigil-log` and `vigil-review` read.
+- `session-<timestamp>-<repo>-<branch>.json` — sidecar metadata: `cwd`, `git_branch`, `git_head`, `active_policy`, `started_at`, and `ccusage_jsonl` (path to the most recently modified Claude Code JSONL usage file, for token-cost attribution).
 
-The post-processing runs in the shell wrapper rather than as a Claude Code hook because hooks fire inside the sandbox, which scrubs the env vars the wrapper sets to communicate the log path. The shell wrapper has no such constraint.
+The raw `script(1)` `.log` is discarded after the strip succeeds; on failure it is kept and no `.txt` is produced (the `.json` sidecar is still written). Sessions outside a git repo or in detached HEAD fall back to a timestamp-only filename (`session-<timestamp>.{txt,json}`).
+
+The post-processing runs in the shell wrapper rather than as a Claude Code hook because hooks run inside the sandbox which previously scrubbed env vars set by the wrapper. Hooks now read session context from `~/.config/vigil/.vigil-session` (see below); per-tool-call logging and the memory-write gate use this pattern.
 
 ## Non-goals
 

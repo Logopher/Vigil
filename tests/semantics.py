@@ -49,7 +49,16 @@ def load(path: Path) -> dict:
 def load_profile(profile_dir: Path) -> dict:
     base = load(profile_dir / "settings.json")
     local = load(profile_dir / "settings.local.template.json")
-    return deep_merge(base, local)
+    merged = deep_merge(base, local)
+    # Claude Code unions permission arrays from both files; deep_merge's
+    # list-replacement semantics are wrong for deny/allow/ask.
+    for key in ("deny", "allow", "ask"):
+        base_vals = base.get("permissions", {}).get(key, [])
+        local_vals = local.get("permissions", {}).get(key, [])
+        combined = list(dict.fromkeys(base_vals + local_vals))
+        if base_vals or local_vals:
+            merged.setdefault("permissions", {})[key] = combined
+    return merged
 
 
 def deny_of(doc: dict) -> list[str]:

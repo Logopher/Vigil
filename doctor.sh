@@ -58,7 +58,8 @@ for path in \
     "$DEST_DIR/scripts/filter-sandbox-denies.py" \
     "$DEST_DIR/profiles/default" \
     "$CLAUDE_DIR" \
-    "$SETTINGS"
+    "$SETTINGS" \
+    "${CLAUDE_DIR}/settings.local.json"
 do
     if [[ -e "$path" || -L "$path" ]]; then
         report PASS "$(display_path "$path")"
@@ -97,13 +98,14 @@ fi
 # -----------------------------------------------------------------------------
 section "Hook scripts"
 
-if [[ -f "$SETTINGS" && $have_python3 -eq 1 ]]; then
+LOCAL_SETTINGS="${CLAUDE_DIR}/settings.local.json"
+if [[ -f "$LOCAL_SETTINGS" && $have_python3 -eq 1 ]]; then
     # Extract every command path under settings.hooks.<event>[].hooks[]
     # whose type is "command". One path per line.
     # Assumes hook commands are bare paths (matches the current
-    # settings.template.json convention). If a hook ever needs args or
+    # settings.local.template.json convention). If a hook ever needs args or
     # an env-var prefix, this extractor needs updating to handle that.
-    hook_paths=$(python3 - "$SETTINGS" <<'PY'
+    hook_paths=$(python3 - "$LOCAL_SETTINGS" <<'PY'
 import json, sys
 with open(sys.argv[1]) as f:
     s = json.load(f)
@@ -118,7 +120,7 @@ for event, entries in (s.get("hooks") or {}).items():
 PY
 )
     if [[ -z "$hook_paths" ]]; then
-        report WARN "no command-type hooks declared in settings.json"
+        report WARN "no command-type hooks declared in settings.local.json"
     else
         while IFS= read -r hp; do
             if [[ ! -e "$hp" ]]; then

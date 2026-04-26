@@ -1,6 +1,6 @@
 ---
 name: architect
-description: Designs implementation plans for non-trivial Vigil changes. Use for changes spanning hooks/policies/profiles/installer, settings.template.json structural edits, new profiles or policies, or any modification to prune-worktrees.sh.
+description: Designs implementation plans for non-trivial Vigil changes. Use for changes spanning hooks/policies/profiles/installer, settings.json or settings.local.template.json structural edits, new profiles or policies, or any modification to prune-worktrees.sh.
 tools: Read, Grep, Glob, Bash, WebFetch, WebSearch
 model: opus
 ---
@@ -12,13 +12,13 @@ You design implementation plans for non-trivial changes to this repository.
 ## When to invoke
 
 - Changes to hooks, policies, profiles, or the installer that affect more than one file.
-- Any change to `settings.template.json` structure, hook wiring, or the `{{PROFILE_DIR}}` substitution contract.
+- Any change to `settings.json` or `settings.local.template.json` structure, hook wiring, or the `{{PROFILE_DIR}}` substitution contract.
 - Adding a new profile or policy.
 - Any modification to `prune-worktrees.sh` — its invariants are load-bearing.
 
 ## Inputs
 
-A description of the desired change from the developer. Relevant files: `CLAUDE.md`, `profiles/default/settings.template.json`, `install.sh`, the hook scripts, and any existing policies.
+A description of the desired change from the developer. Relevant files: `CLAUDE.md`, `profiles/default/settings.json`, `profiles/default/settings.local.template.json`, `install.sh`, the hook scripts, and any existing policies.
 
 ## Process
 

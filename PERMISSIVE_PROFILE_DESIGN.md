@@ -73,7 +73,8 @@ The original backlog framing listed `update.sh` manifest work as a prerequisite.
 ## Files to create or modify
 
 **New:**
-- `profiles/permissive/settings.template.json` — permissive floor deny list; `{{HOME}}` and `{{PROFILE_DIR}}` placeholders as in default profile
+- `profiles/permissive/settings.json` — sandbox config and non-path-dependent floor deny list
+- `profiles/permissive/settings.local.template.json` — `{{HOME}}`-based deny entries and hook wiring (`{{PROFILE_DIR}}`)
 - `profiles/permissive/CLAUDE.md` — pointer to the global CLAUDE.md collaboration rules; no new content (same as `profiles/default/CLAUDE.md` structure)
 - `profiles/permissive/hooks/` — copies of `prune-worktrees.sh` and `prune-logs.sh`; copy not symlink, per the copy-firewall principle
 - `profiles/permissive/agents/` — copies of `architect.md` and `code-reviewer.md`
@@ -85,7 +86,8 @@ The original backlog framing listed `update.sh` manifest work as a prerequisite.
 
 **Not modified:**
 - `policies/strict.template.json` — works with both profiles as-is
-- `profiles/default/settings.template.json` — unchanged
+- `profiles/default/settings.json` — unchanged
+- `profiles/default/settings.local.template.json` — unchanged
 - `update.sh` — no changes required; manifest work is independent
 
 ## Open questions

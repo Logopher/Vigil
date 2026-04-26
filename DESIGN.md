@@ -34,7 +34,8 @@ The copy firewall depends on a second rule: Claude never runs `install.sh`. An a
 
 A profile directory contains:
 
-- `settings.template.json` — merged by Claude Code at session start. Sets sandbox mode, the baseline deny list, and the hook wiring. The `{{PROFILE_DIR}}` placeholder is substituted at install time so the generated `settings.json` points at the hooks on this specific machine.
+- `settings.json` — static, host-independent configuration: sandbox mode and the non-path-dependent baseline deny list. Installed verbatim; identical in the repo and on the target machine.
+- `settings.local.template.json` — host-specific configuration: `{{HOME}}`-based deny entries (credential paths, shell dotfiles, Vigil config paths) and hook wiring (`{{PROFILE_DIR}}`). Substituted at install time; the generated `settings.local.json` is not identical to the template. Claude Code unions the `deny` arrays from both files at session start.
 - `CLAUDE.md` — instructions for Claude in every session under this profile. Covers commit discipline, agent-gate workflow, operational notes.
 - `hooks/*.sh` — scripts fired at session start/end and around tool use. Currently: worktree cleanup, tool-use logging, tool-result logging.
 - `agents/*.md` — specialist agent definitions (`architect`, `code-reviewer`) available in every session.
@@ -85,7 +86,7 @@ The sandbox has one deliberate exception: commands listed in `sandbox.excludedCo
 2. Copy `vigil-aliases.sh` to `~/.config/vigil/vigil-aliases.sh`.
 3. For each policy file, substitute `{{HOME}}` with the user's home directory and write to `~/.config/vigil/policies/<name>.json`. Non-template policy files (`yolo.json`) are copied verbatim.
 4. Copy management scripts to `~/.config/vigil/scripts/` and make them executable.
-5. Copy the default profile directly into `~/.claude/`. Substitute `{{PROFILE_DIR}}` with `$HOME/.claude` and `{{HOME}}` with the user's home directory when processing `settings.template.json`.
+5. Copy the default profile directly into `~/.claude/`. Copy `settings.json` verbatim. Substitute `{{PROFILE_DIR}}` with `$HOME/.claude` and `{{HOME}}` with the user's home directory when processing `settings.local.template.json`, writing the result as `settings.local.json`.
 6. Ensure hook scripts are executable.
 7. Run `scripts/filter-sandbox-denies.py` against the generated `~/.claude/settings.json` to drop any `sandbox.filesystem.denyRead` entry that is a symlink, missing, or the wrong type. Bubblewrap fails closed if any denyRead entry cannot be mounted over; this filter prevents a confusing "every Bash subprocess fails" failure mode.
 8. Create a convenience symlink at `~/.config/vigil/profiles/default` pointing to `~/.claude`, so the multi-profile layout convention holds for docs and any future additional profiles.

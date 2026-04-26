@@ -1,25 +1,13 @@
 {
-  "sandbox": {
-    "enabled": true,
-    "failIfUnavailable": true,
-    "autoAllowBashIfSandboxed": true,
-    "allowUnsandboxedCommands": false,
-    "enableWeakerNestedSandbox": false,
-    "enableWeakerNetworkIsolation": false,
-    "excludedCommands": ["git commit *", "git tag *"],
-    "filesystem": {},
-    "network": {
-      "allowedDomains": [],
-      "allowAllUnixSockets": false,
-      "allowLocalBinding": false
-    }
-  },
   "permissions": {
-    "defaultMode": "plan",
     "deny": [
-      "Bash(rm:*)",
-      "Bash(sudo:*)",
-      "Bash(vigil-install-review:*)",
+      "Read({{HOME}}/.ssh/**)",
+      "Read({{HOME}}/.aws/**)",
+      "Read({{HOME}}/.netrc)",
+      "Read({{HOME}}/.kube/**)",
+      "Read({{HOME}}/.docker/config.json)",
+      "Read({{HOME}}/.config/gh/**)",
+      "Read({{HOME}}/.config/doctl/**)",
       "Write({{HOME}}/.claude/CLAUDE.md)",
       "Edit({{HOME}}/.claude/CLAUDE.md)",
       "MultiEdit({{HOME}}/.claude/CLAUDE.md)",

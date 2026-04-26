@@ -14,8 +14,8 @@ PATH_TOOLS = ("Read", "Edit", "Write", "MultiEdit", "NotebookEdit")
 MATCHER_RE = re.compile(r"^([A-Za-z]+)\((.*)\)$")
 
 REPO_DIR = Path(__file__).resolve().parent.parent
-PROFILE = REPO_DIR / "profiles" / "default" / "settings.template.json"
-PERMISSIVE = REPO_DIR / "profiles" / "permissive" / "settings.template.json"
+PROFILE_DIR = REPO_DIR / "profiles" / "default"
+PERMISSIVE_DIR = REPO_DIR / "profiles" / "permissive"
 DEV = REPO_DIR / "policies" / "dev.template.json"
 STRICT = REPO_DIR / "policies" / "strict.template.json"
 YOLO = REPO_DIR / "policies" / "yolo.json"
@@ -44,6 +44,12 @@ def section(title: str) -> None:
 def load(path: Path) -> dict:
     with open(path) as f:
         return json.load(f)
+
+
+def load_profile(profile_dir: Path) -> dict:
+    base = load(profile_dir / "settings.json")
+    local = load(profile_dir / "settings.local.template.json")
+    return deep_merge(base, local)
 
 
 def deny_of(doc: dict) -> list[str]:
@@ -353,8 +359,8 @@ def check_hook_agent_drift() -> None:
 
 
 def main() -> int:
-    profile = load(PROFILE)
-    permissive = load(PERMISSIVE)
+    profile = load_profile(PROFILE_DIR)
+    permissive = load_profile(PERMISSIVE_DIR)
     dev = load(DEV)
     strict = load(STRICT)
     yolo = load(YOLO)

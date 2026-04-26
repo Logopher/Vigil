@@ -4,7 +4,7 @@ Running list of known issues and proposed work, organized by triage disposition.
 
 For project stage and what's blocking each transition, see `LIFECYCLE.md`. For verified vs. unverified protection claims, see `THREAT_MODEL.md`.
 
-**Last triaged:** 2026-04-26 (shipped marker-file pattern enabling hook env-var workaround; shipped per-tool-call logging, active-policy banner, and memory-write validation hooks; removed all three backlog items).
+**Last triaged:** 2026-04-26 (shipped marker-file pattern enabling hook env-var workaround; shipped per-tool-call logging, active-policy banner, and memory-write validation hooks; removed all three backlog items; added Analytics section from teardown of current analytics layer gaps).
 
 ## Documented gaps — do not action
 
@@ -34,6 +34,32 @@ Token-spend and regression-attribution tools that fit Vigil's scope as an LLM de
 - **`ccusage`** — CLI that reads Claude Code's local JSONL usage logs (`~/.claude/projects/`) and reports per-session, per-model, per-project token and cost breakdowns. Useful for identifying overspent sessions (candidates for model downgrade or context trimming) and underspent ones (agents that may have bailed early). Ready to use: `npm install -g ccusage`, no further setup. On-demand usage is sufficient to start.
 - **Issue-tracker integration for pyszz date filtering.** `bug-fixes.json` supports `earliest_issue_date` per entry, which tells SZZ to exclude candidate inducing commits authored after the issue was first reported. `pyszz-bugs` currently omits this field. Enriching it requires correlating each fix commit to a GitHub Issue — either via issue references in commit messages (`fixes #123`, `closes #123`) or PR metadata — then fetching the issue creation timestamp via the GitHub API. Enables more precise inducing-commit attribution at the cost of a `gh`/API dependency and the assumption that fix commits reference their issues.
 - **`pyszz`** — Python implementation of the SZZ algorithm: given a list of bug-fixing commit SHAs, traces back through blame/diff history to identify the commits that introduced each bug. Angular-style `fix:` and `fix(scope):` commits serve as the bug-fixing commit source via a pre-filter: `git log --format="%H" --grep="^fix[:(]"`. Viable now — `claude-config` has 15 fix commits. Vigil integration seam: cross-reference inducing commit timestamps against session logs to attribute bugs to the session that introduced them. Original repo archived Sep 2025; use v2: `github.com/grosa1/pyszz_v2`.
+
+## Analytics — Vigil layer improvements
+
+Improvements to the analytics infrastructure already shipped in `scripts/` and `~/vigil-logs/`. Items are ordered so earlier ones unblock or simplify later ones.
+
+- **Investigate ccusage pricing table access.** `join-sessions.py` maintains its own `_DEFAULT_PRICING` table that will drift as Anthropic reprices. ccusage solves the same problem and may expose its table via a flag (`ccusage --help`), a JSON output mode, or a predictably-named module file under `npm root -g`. If accessible, delegate to it rather than maintaining a parallel table. If not, at minimum update the comment in `_DEFAULT_PRICING` to point at ccusage's package source (the canonical mapping of `message.model` strings to prices) rather than the Anthropic pricing page (which omits model IDs). Either path closes the maintenance gap.
+
+- **Add `ended_at` to session sidecar.** A single write in the `vigil-aliases.sh` EXIT trap records session end time. Enables session duration as a first-class field and is prerequisite for policy effectiveness comparison and session-length trend analysis. Schema change: add `ended_at` (ISO-8601 local, same format as `started_at`) to the sidecar JSON and update ANALYTICS.md. Fast: ~5 lines in `vigil-aliases.sh`.
+
+- **Tool-use aggregation script.** `scripts/summarize-sessions.py`: reads `tools-<session>.jsonl` files, outputs per-session summary rows — call count by tool type, Bash-to-Read ratio, likely-retry runs (same tool invoked twice within ~2 seconds), turn count (number of distinct `tool_use_id` prefixes per session). No new data required; logs already exist. Natural output: CSV or JSON array, one row per session, joinable with sidecar data by session ID prefix.
+
+- **Tool-call duration via Pre/Post join.** The `tools-<session>.jsonl` has both `PreToolUse` and `PostToolUse` entries with matching `tool_use_id` fields. Joining them by `tool_use_id` yields per-call latency. Useful for identifying slow tool classes (long Bash commands vs. fast Reads) and outlier calls that dominated a session's wall time. Can be added to the aggregation script above.
+
+- **Policy effectiveness comparison.** Extend the aggregation script or add standalone: join per-session summaries with sidecar `active_policy` and cost from `ccusage_jsonl`. Surface cost, call count, and session duration per policy. Answers "does `dev` produce cheaper sessions than `strict` for the same class of work?" Dependency: `ended_at` for duration.
+
+- **Cross-session trend analysis.** Plot session-level metrics over time: cost per session, call count per session, session duration, Bash density. A degrading cache ratio (currently visible only in ccusage) or increasing session length is a signal that session hygiene has eroded. The aggregation script output is the input; a simple CSV + `gnuplot` or a Jupyter notebook is sufficient. No new data collection needed.
+
+- **Diff-to-session attribution (forward direction).** The existing `join-sessions.py` goes backward: given a bug-fix commit, find the session that produced the inducing commit. The forward direction — given a session, which commits did it produce? — is unanswered. Approach: for each session, run `git log --after="<started_at>" --before="<ended_at>" --format="%H %ae"` scoped to the sidecar `cwd`. Only meaningful with `ended_at`; git author timestamps and the session window won't align perfectly for interactive rebases or amended commits, but it handles the common case.
+
+- **Blocked tool call recording.** When `validate-memory-write.sh` (or the permission layer) blocks a tool call, the `PostToolUse` hook does not fire — only `PreToolUse` fires. The tools JSONL therefore has no record of denied calls. Options: (a) the `validate-memory-write.sh` hook could append a `{"event":"denied","tool_name":...}` line itself before exiting non-zero; (b) compare PreToolUse vs. PostToolUse counts by `tool_use_id` to infer denials. Tracking denied calls adds a security signal: a session with many denied Write attempts is anomalous.
+
+- **Subagent cost attribution.** When architect or code-reviewer agents spawn, they create their own JSONL entries (possibly under the same project slug, possibly a separate one). ccusage shows subagent overhead as ~8% of total spend, but `join-sessions.py` and the aggregation script currently treat main-session and subagent JSONL entries as equivalent. Filtering by `isSidechain` excludes some entries already; verifying whether subagent sessions land in the same JSONL file or a different one, and whether `isSidechain` correctly tags them, would let the scripts attribute costs to main vs. agent sessions.
+
+- **Coordinated log pruning.** `hooks/prune-logs.sh` prunes session transcripts (`session-*.txt`) and sidecar JSON (`session-*.json`) by age and total size. It does not prune `tools-<session>.jsonl` files. As the tool-use log grows (one entry per tool call, every session), it will accumulate independently of the transcript pruning. Options: extend `prune-logs.sh` / `scripts/prune-logs.py` to include tool JSONL files in the retention calculation, keyed by the same session ID prefix, so the two are pruned together.
+
+- **Investigate direct JSONL session ID linkage.** The `ccusage_jsonl` approximation (most recently modified JSONL at session end) fails for concurrent sessions. Two paths to investigate: (a) does the harness pass a `CLAUDE_SESSION_ID` or similar environment variable that `vigil-aliases.sh` or a `SessionStart` hook could capture? (b) can `vigil-aliases.sh` read the JSONL filename from `~/.claude/projects/<slug>/` at session start, if the harness creates it immediately on launch? If either works, replace the approximation with a hard key. Documented as "Remaining gap" in ANALYTICS.md.
 
 ## Stage 2 — needs versioning / wider design
 

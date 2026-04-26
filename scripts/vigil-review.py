@@ -20,7 +20,7 @@ import argparse
 import os
 import re
 import stat
-import subprocess
+import subprocess  # nosec B404 -- subprocess is intentional; all calls use list args and shell=False
 import sys
 from pathlib import Path
 
@@ -124,7 +124,7 @@ def _git(args, cwd=None, input_text=None):
     # containing non-UTF-8 bytes (raw filename bytes, mojibake author
     # names) cannot crash the viewer before sanitization runs — the whole
     # paranoid-rendering posture depends on always reaching sanitize().
-    return subprocess.run(
+    return subprocess.run(  # nosec B603 B607 -- B603: list args, no shell=True; B607: git is a system binary, not user-controlled input
         ['git', *_GIT_HARDEN, *args],
         cwd=cwd,
         input=input_text,
@@ -184,7 +184,7 @@ def vigil_session_id(sha: str, cwd: str):
 
 def transcript_note(session_id: str) -> str:
     if not _SESSION_ID_RE.match(session_id):
-        return f'Transcript: invalid Vigil-Session id (rejected)'
+        return 'Transcript: invalid Vigil-Session id (rejected)'
     log_dir = os.environ.get('VIGIL_LOG_DIR') or os.path.expanduser('~/vigil-logs')
     path = Path(log_dir) / f'session-{session_id}.txt'
     if path.is_file():
@@ -194,7 +194,7 @@ def transcript_note(session_id: str) -> str:
 
 def self_check():
     problems = []
-    git_probe = subprocess.run(
+    git_probe = subprocess.run(  # nosec B603 B607 -- B603: list args, no shell=True; B607: git is a system binary, not user-controlled input
         ['git', '--version'], capture_output=True, text=True
     )
     if git_probe.returncode != 0:

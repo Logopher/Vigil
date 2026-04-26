@@ -54,7 +54,7 @@ import hashlib
 import json
 import os
 import shutil
-import subprocess
+import subprocess  # nosec B404 -- subprocess is intentional; all calls use list args and shell=False
 import sys
 from pathlib import Path
 
@@ -88,7 +88,7 @@ def platform_check() -> "str | None":
 
 def resolve_repo(arg: str) -> "tuple[Path | None, str | None]":
     target = Path(arg).resolve()
-    r = subprocess.run(
+    r = subprocess.run(  # nosec B603 B607 -- B603: list args, no shell=True; B607: git is a system binary, not user-controlled input
         ["git", "-C", str(target), "rev-parse", "--show-toplevel"],
         capture_output=True,
         text=True,
@@ -138,7 +138,7 @@ def collision_probe(repo: Path) -> "str | None":
     """Return a multi-line message naming everything that would collide."""
     findings = []
 
-    r = subprocess.run(
+    r = subprocess.run(  # nosec B603 B607 -- B603: list args, no shell=True; B607: git is a system binary, not user-controlled input
         ["git", "-C", str(repo), "config", "--local", "--get", "core.hooksPath"],
         capture_output=True,
         text=True,
@@ -243,7 +243,7 @@ def install_gate(repo: Path) -> "str | None":
     for name in HOOK_FILES:
         dest = gate_dir / name
         shutil.copyfile(src_dir / name, dest)
-        os.chmod(dest, 0o755)
+        os.chmod(dest, 0o755)  # nosec B103 -- hook files must be executable; 0o755 is correct
         manifest_lines.append(f"{sha256_file(dest)}  {dest}")
     manifest_lines.append(f"{sha256_file(review_script)}  {review_script}")
 
@@ -267,7 +267,7 @@ def install_gate(repo: Path) -> "str | None":
     manifest_path.write_text(new_manifest)
     os.chmod(manifest_path, 0o644)
 
-    r = subprocess.run(
+    r = subprocess.run(  # nosec B603 B607 -- B603: list args, no shell=True; B607: git is a system binary, not user-controlled input
         ["git", "-C", str(repo), "config", "--local",
          "core.hooksPath", GATE_DIR_NAME],
         capture_output=True,

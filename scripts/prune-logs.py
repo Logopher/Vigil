@@ -16,7 +16,6 @@ A 10-minute mtime floor protects the currently-running session from
 being pruned by its own SessionStart hook.
 """
 import argparse
-import os
 import re
 import sys
 import time

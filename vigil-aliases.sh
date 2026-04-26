@@ -245,8 +245,8 @@ vigil_set_default() {
     if [[ "$current_profile" != "default" && $force -eq 0 ]]; then
         current_bundle="$vigil_dir/profiles/$current_profile"
         dirty=()
-        for f in settings.json CLAUDE.md; do
-            if [[ -f "$HOME/.claude/$f" ]] && \
+        for f in settings.json CLAUDE.md settings.local.template.json; do
+            if [[ -f "$HOME/.claude/$f" && -f "$current_bundle/$f" ]] && \
                ! diff -q "$HOME/.claude/$f" "$current_bundle/$f" >/dev/null 2>&1; then
                 dirty+=("$HOME/.claude/$f")
             fi
@@ -270,7 +270,7 @@ vigil_set_default() {
     mkdir -p "$staging"
     cp -r -- "$target_bundle/." "$staging/"
 
-    for f in settings.json CLAUDE.md; do
+    for f in settings.json CLAUDE.md settings.local.template.json; do
         if [[ -f "$staging/$f" ]]; then
             [[ -f "$HOME/.claude/$f" ]] && mv -- "$HOME/.claude/$f" "$HOME/.claude/$f.bak"
             mv -- "$staging/$f" "$HOME/.claude/$f"
@@ -286,6 +286,25 @@ vigil_set_default() {
         fi
     done
     rm -rf "$staging"
+
+    # Regenerate settings.local.json so hook paths resolve to ~/.claude,
+    # not the source bundle path they were baked to at install time.
+    local live_template="$HOME/.claude/settings.local.template.json"
+    if [[ -f "$live_template" ]]; then
+        local tmp_local
+        tmp_local="$(mktemp "$HOME/.claude/.settings.local.XXXXXX")"
+        if sed -e "s|{{PROFILE_DIR}}|$HOME/.claude|g" \
+               -e "s|{{HOME}}|$HOME|g" \
+               "$live_template" > "$tmp_local"; then
+            mv -- "$tmp_local" "$HOME/.claude/settings.local.json"
+        else
+            rm -f "$tmp_local"
+            printf 'vigil set-default: error: failed to regenerate settings.local.json\n' >&2
+            return 1
+        fi
+    else
+        printf 'vigil set-default: warning: settings.local.template.json missing from profile bundle — hook paths may be stale\n' >&2
+    fi
 
     # Write active-profile atomically via temp-file rename.
     tmp_profile="$(mktemp "$vigil_dir/.active-profile.XXXXXX")"

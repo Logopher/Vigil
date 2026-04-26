@@ -159,16 +159,20 @@ The `.json` sidecar is written after each session and contains:
   "git_head": "<sha-at-session-start>",
   "active_policy": "strict",
   "started_at": "2026-04-26T05:55:51",
+  "ended_at": "2026-04-26T06:43:17",
   "ccusage_jsonl": "/home/grault/.claude/projects/-home-grault-code-claude-config/<uuid>.jsonl"
 }
 ```
 
 `git_head` and `git_branch` are captured before the session starts, reflecting the repo
 state Claude operated against. `started_at` is local time with no timezone offset, derived from the same
-`VIGIL_SESSION_ID` string as the filename, so the two always match. Cross-machine or
-DST-boundary timestamp comparisons require awareness of the recording machine's timezone. `ccusage_jsonl` is the most recently modified JSONL under
-`~/.claude/projects/` at session end, an approximation accurate for single-session
-workloads; concurrent sessions may alias to the wrong file.
+`VIGIL_SESSION_ID` string as the filename, so the two always match. `ended_at` is captured
+immediately after `script(1)` exits, in the same local-time format; the difference
+`ended_at − started_at` is session wall-clock duration. Cross-machine or DST-boundary
+timestamp comparisons require awareness of the recording machine's timezone. `ccusage_jsonl`
+is the most recently modified JSONL under `~/.claude/projects/` at session end, an
+approximation accurate for single-session workloads; concurrent sessions may alias to the
+wrong file.
 
 ### Role in observability
 

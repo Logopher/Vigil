@@ -40,3 +40,17 @@ jobs:
             profiles/default/hooks/prune-logs.sh \
             scripts/hooks/pre-push \
             scripts/hooks/prepare-commit-msg
+
+  python-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install linters
+        run: pip install ruff==0.15.12 bandit==1.9.4
+      - name: Run ruff
+        run: ruff check scripts/
+      - name: Run bandit
+        run: bandit --severity-level medium --confidence-level high scripts/vigil-review.py scripts/vigil-install-review

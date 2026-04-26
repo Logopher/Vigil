@@ -5,9 +5,9 @@ Usage:
     prune-logs.py [--log-dir DIR] [--older-than DURATION]
                   [--max-total-size SIZE] [--dry-run] [--quiet]
 
-Targets files matching session-YYYYMMDD-HHMMSS.{log,txt} — the scheme
-produced by vigil-aliases.sh. Files outside that pattern are never
-touched, so pointing --log-dir at the wrong directory is safe.
+Targets files matching session-YYYYMMDD-HHMMSS.{log,txt,json} — the
+scheme produced by vigil-aliases.sh. Files outside that pattern are
+never touched, so pointing --log-dir at the wrong directory is safe.
 
 Defaults: --log-dir ~/vigil-logs, --older-than 180d. --max-total-size
 is only applied when explicitly set.
@@ -21,7 +21,7 @@ import sys
 import time
 from pathlib import Path
 
-SESSION_RE = re.compile(r'^session-(\d{8}-\d{6})\.(log|txt)$')
+SESSION_RE = re.compile(r'^session-(\d{8}-\d{6})\.(log|txt|json)$')
 LIVE_FLOOR_SECONDS = 10 * 60
 
 
@@ -140,7 +140,7 @@ def main(argv):
         verb = "would prune" if args.dry_run else "pruned"
         cap = fmt_size(args.max_total_size) if args.max_total_size is not None else "none"
         age_days = args.older_than / 86400
-        print(f"prune-logs: {verb} {pruned_count} pair(s) ({fmt_size(pruned_bytes)}); "
+        print(f"prune-logs: {verb} {pruned_count} session(s) ({fmt_size(pruned_bytes)}); "
               f"age>{age_days:g}d cap={cap}")
     return 0
 

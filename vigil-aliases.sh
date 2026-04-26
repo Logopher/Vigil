@@ -61,6 +61,20 @@ _vigil_run_with_logging() (
     export VIGIL_SESSION_ID
     export VIGIL_LOG_DIR="$HOME/vigil-logs"
     mkdir -p "$VIGIL_LOG_DIR"
+
+    # Extract active policy name from the --settings flag in $@.
+    local active_policy="" _prev=""
+    for _arg in "$@"; do
+        [[ "$_prev" == "--settings" ]] && { active_policy=$(basename "${_arg%.json}"); break; }
+        _prev="$_arg"
+    done
+
+    # Capture git state before the session starts so the sidecar reflects
+    # the repo state Claude was operating against, not the post-session state.
+    local _git_branch _git_head
+    _git_branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || true)
+    _git_head=$(git rev-parse HEAD 2>/dev/null || true)
+
     local logfile="$VIGIL_LOG_DIR/session-$VIGIL_SESSION_ID.log"
     case "$(uname)" in
         Darwin|*BSD)
@@ -72,6 +86,25 @@ _vigil_run_with_logging() (
             script -B "$logfile" -c "command claude $*"
             ;;
     esac
+
+    # Write sidecar metadata JSON. started_at is derived from VIGIL_SESSION_ID
+    # (local time, no timezone suffix) so it matches the filename even if the
+    # session ran past midnight.
+    if command -v python3 >/dev/null 2>&1; then
+        local _sid="$VIGIL_SESSION_ID"
+        local _started_at="${_sid:0:4}-${_sid:4:2}-${_sid:6:2}T${_sid:9:2}:${_sid:11:2}:${_sid:13:2}"
+        python3 -c "
+import json, sys
+print(json.dumps({
+    'cwd':          sys.argv[1],
+    'git_branch':   sys.argv[2],
+    'git_head':     sys.argv[3],
+    'active_policy':sys.argv[4],
+    'started_at':   sys.argv[5],
+}, indent=2))
+" "$PWD" "$_git_branch" "$_git_head" "$active_policy" "$_started_at" \
+            > "${logfile%.log}.json" 2>/dev/null || true
+    fi
 
     # Strip ANSI from the raw script(1) capture into a .txt companion,
     # then discard the .log. Strip failure is reported on stderr; the

@@ -86,6 +86,30 @@
           }
         ]
       }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "{{PROFILE_DIR}}/hooks/log-tool-use.sh",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "{{PROFILE_DIR}}/hooks/log-tool-use.sh",
+            "timeout": 5
+          }
+        ]
+      }
     ]
   }
 }

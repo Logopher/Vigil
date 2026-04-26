@@ -59,11 +59,16 @@ stub_home() {
 install_into() {
     local home="$1"
     stub_home "$home"
-    HOME="$home" bash "$REPO_DIR/install.sh" >/dev/null
-    # ~/.claude/skills and ~/.claude/commands are in MASTER_DENY_WRITE
-    # but are not created by install.sh (user-managed). Create them now
-    # so a subsequent doctor run matches the deny lists from install time.
+    # Run from repo root so {{CWD}} in MASTER_DENY_WRITE expands to a
+    # directory with .git/, consistent with the CWD used by run_doctor.
+    (cd "$REPO_DIR" && HOME="$home" bash "$REPO_DIR/install.sh" >/dev/null)
+    # ~/.claude/skills and ~/.claude/commands are in MASTER_DENY_WRITE but
+    # are not created by install.sh (user-managed). Create them after install
+    # so the installer's conflict-check does not see a pre-existing ~/.claude,
+    # then refresh the deny lists to include the new dirs.
     mkdir -p "$home/.claude/skills" "$home/.claude/commands"
+    (cd "$REPO_DIR" && HOME="$home" python3 "$home/.config/vigil/scripts/filter-sandbox-denies.py" \
+        "$home/.claude/settings.json" >/dev/null)
 }
 
 # Run doctor with $HOME set; capture combined stdout+stderr and exit code.
@@ -72,7 +77,7 @@ run_doctor() {
     local home="$1"
     local rc=0
     local out
-    out=$(HOME="$home" bash "$DOCTOR" 2>&1) || rc=$?
+    out=$(cd "$REPO_DIR" && HOME="$home" bash "$DOCTOR" 2>&1) || rc=$?
     printf '%d\n%s' "$rc" "$out"
 }
 
@@ -220,7 +225,7 @@ home=$(mktmp)
 install_into "$home"
 installed_doctor="$home/.config/vigil/doctor.sh"
 rc=0
-HOME="$home" "$installed_doctor" >/dev/null 2>&1 || rc=$?
+(cd "$REPO_DIR" && HOME="$home" "$installed_doctor" >/dev/null 2>&1) || rc=$?
 if [[ "$rc" == "0" ]]; then
     pass "installed doctor.sh runs via its shebang and exits 0"
 else

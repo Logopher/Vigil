@@ -8,7 +8,7 @@ This repo holds Vigil, the user's personal paranoid Claude Code configuration, a
 
 Repo layout:
 
-- `profiles/<name>/` — per-profile bundle: `settings.template.json`, `CLAUDE.md`, `hooks/*.sh`. The default profile is strict-by-construction.
+- `profiles/<name>/` — per-profile bundle: `settings.json`, `settings.local.template.json`, `CLAUDE.md`, `hooks/*.sh`. The default profile is strict-by-construction.
 - `policies/<name>.json` — permission overlays invoked per session via `claude --settings ~/.config/vigil/policies/<name>.json`. Current set: `strict`, `dev`, `yolo`.
 - `vigil-aliases.sh` — sourced from `~/.bashrc` (from the installed copy at `~/.config/vigil/vigil-aliases.sh`); wraps the `claude` CLI with `script(1)` and exposes `vigil`, `vigil-dev`, `vigil-strict`, `vigil-yolo`, and `vigil-log*` entry points. Session transcripts land under `~/vigil-logs/` as a pair per session: `session-<timestamp>.log` is the raw `script(1)` TTY capture (full fidelity, for replay), and `session-<timestamp>.txt` is the ANSI-stripped readable companion produced by `scripts/strip-ansi.py` (what `vigil-log` and `vigil-review` read).
 - `install.sh` — copy-based installer; refuses to run if any destination node already exists.
@@ -17,7 +17,7 @@ Repo layout:
 
 Two layers of configuration, merged by the Claude Code harness at session start:
 
-1. **Profile** (`~/.claude/settings.json`) — sandbox mode, the baseline `deny` list, and hooks wiring. Default profile is plan-mode with a hard `deny` list covering `rm`, `sudo`, non-read-only `git`, network fetchers (`curl`, `wget`), SSH-family tools (`ssh`, `scp`, `rsync`, etc.), language runtimes (`node`, `python`, `python3`, `npx`), a few risky tools (`npm publish`, `docker`, `kubectl`), and credential paths (`~/.ssh/`, `~/.aws/`, etc.). `~/.claude/` is a real directory shared with Claude Code's runtime state (credentials, sessions, history). A convenience symlink at `~/.config/vigil/profiles/default` points to `~/.claude/`.
+1. **Profile** (`~/.claude/settings.json` and `~/.claude/settings.local.json`) — sandbox mode, the baseline `deny` list, and hooks wiring. Default profile is plan-mode with a hard `deny` list covering `rm`, `sudo`, non-read-only `git`, network fetchers (`curl`, `wget`), SSH-family tools (`ssh`, `scp`, `rsync`, etc.), language runtimes (`node`, `python`, `python3`, `npx`), a few risky tools (`npm publish`, `docker`, `kubectl`), and credential paths (`~/.ssh/`, `~/.aws/`, etc.). `~/.claude/` is a real directory shared with Claude Code's runtime state (credentials, sessions, history). A convenience symlink at `~/.config/vigil/profiles/default` points to `~/.claude/`.
 2. **Policy** (optional, via `claude --settings .../policies/<name>.json`) — permissions overlay. `strict` matches the profile baseline; `dev` enables `acceptEdits` with an allow list for routine dev commands and ask-gates for risky ones; `yolo` bypasses confirmations except for `rm` and `sudo`. Hooks from the profile persist across policy overrides.
 
 A non-default profile is selected by setting `CLAUDE_CONFIG_DIR` for the session; the default (no env var) reads from `~/.claude`, which is the default profile.
@@ -27,11 +27,11 @@ Hooks registered in the default profile:
 - `SessionStart` / `SessionEnd` → `hooks/prune-worktrees.sh`
 - `SessionStart` → `hooks/prune-logs.sh` (retention for `~/vigil-logs/`; defaults 90d age, 2G cap)
 
-Hook paths in the template use the `{{PROFILE_DIR}}` placeholder; the installer substitutes the installed profile directory when generating `settings.json`.
+Hook paths in the template use the `{{PROFILE_DIR}}` placeholder; the installer substitutes the installed profile directory when generating `settings.local.json`.
 
 Per-tool-call logging hooks (`PreToolUse` / `PostToolUse`) previously existed but were removed after proving unreliable. Reintroducing a working version is tracked in `BACKLOG.md`. Session-level transcripts are still captured via `script(1)` from the shell wrappers in `vigil-aliases.sh`.
 
-The sandbox `denyRead` and `denyWrite` lists are *not* defined in `settings.template.json`. Their authoritative source is the master tuples (`MASTER_DENY_READ`, `MASTER_DENY_WRITE`) at the top of `scripts/filter-sandbox-denies.py`. The installer invokes that script after writing `settings.json`; the script overwrites the two arrays with the master entries that currently pass bubblewrap's mount-target type check. To change the desired deny set, edit the Python source — not the JSON template. The script is safe to re-run standalone (e.g., after installing a new CLI that creates `~/.aws/`) to refresh the lists without a full reinstall.
+The sandbox `denyRead` and `denyWrite` lists are *not* defined in `settings.json`. Their authoritative source is the master tuples (`MASTER_DENY_READ`, `MASTER_DENY_WRITE`) at the top of `scripts/filter-sandbox-denies.py`. The installer invokes that script after writing `settings.json`; the script overwrites the two arrays with the master entries that currently pass bubblewrap's mount-target type check. To change the desired deny set, edit the Python source — not the JSON files. The script is safe to re-run standalone (e.g., after installing a new CLI that creates `~/.aws/`) to refresh the lists without a full reinstall.
 
 ## `profiles/default/hooks/prune-worktrees.sh`
 

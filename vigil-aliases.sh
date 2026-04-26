@@ -112,9 +112,20 @@ print(json.dumps({
     # file intact rather than nothing.
     local stripper="$HOME/.config/vigil/scripts/strip-ansi.py"
     if [[ -f "$stripper" && -f "$logfile" ]] && command -v python3 >/dev/null 2>&1; then
-        python3 "$stripper" "$logfile" "${logfile%.log}.txt" \
+        local _txtfile="${logfile%.log}.txt"
+        python3 "$stripper" "$logfile" "$_txtfile" \
             && rm -f -- "$logfile" \
             || echo "vigil: strip-ansi failed; raw log kept at $logfile" >&2
+        # Prepend a self-describing policy header so the transcript is
+        # readable without consulting the sidecar JSON. Validate the
+        # policy name to a safe character class before embedding it.
+        if [[ "$active_policy" =~ ^[a-zA-Z0-9_-]+$ && -f "$_txtfile" ]]; then
+            local _tmp=""
+            _tmp=$(mktemp) \
+                && { printf '# vigil-policy: %s\n' "$active_policy"; cat "$_txtfile"; } > "$_tmp" \
+                && mv -- "$_tmp" "$_txtfile" \
+                || { [[ -n "$_tmp" ]] && rm -f -- "$_tmp"; }
+        fi
     fi
 )
 

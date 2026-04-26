@@ -32,10 +32,38 @@ mktmp() {
     printf '%s' "$d"
 }
 
-# Install into the given ephemeral $HOME.
+# Populate credential paths that filter-sandbox-denies.py includes
+# conditionally. Must be called before install_into so the deny lists
+# written during install match what the filter computes on re-check.
+# ~/.aws is intentionally omitted: the stale-deny-list test creates it
+# after install to trigger drift; all other tests never create it.
+# ~/.claude must NOT be pre-created: install.sh aborts if it exists.
+stub_home() {
+    local home="$1"
+    mkdir -p "$home/.ssh" "$home/.kube" "$home/.docker" \
+             "$home/.config/gh" "$home/.config/doctl" \
+             "$home/.local/bin" "$home/.local/lib" \
+             "$home/bin"
+    touch "$home/.netrc" \
+          "$home/.docker/config.json" \
+          "$home/.gitconfig" \
+          "$home/.bashrc" "$home/.zshrc" "$home/.bash_profile" \
+          "$home/.zprofile" "$home/.profile" "$home/.zshenv" \
+          "$home/.bash_aliases"
+}
+
+# Install into the given ephemeral $HOME. Not a pure install.sh proxy:
+# it also calls stub_home() and creates post-install dirs. Tests that
+# need to assert on exactly what install.sh produces should call
+# install.sh directly instead of using this helper.
 install_into() {
     local home="$1"
+    stub_home "$home"
     HOME="$home" bash "$REPO_DIR/install.sh" >/dev/null
+    # ~/.claude/skills and ~/.claude/commands are in MASTER_DENY_WRITE
+    # but are not created by install.sh (user-managed). Create them now
+    # so a subsequent doctor run matches the deny lists from install time.
+    mkdir -p "$home/.claude/skills" "$home/.claude/commands"
 }
 
 # Run doctor with $HOME set; capture combined stdout+stderr and exit code.
@@ -165,7 +193,7 @@ fi
 section "Missing rc source line -> WARN, not FAIL"
 home=$(mktmp)
 install_into "$home"
-# Ephemeral $HOME has no rc files at all — wrapper is unsourced.
+# stub_home pre-creates empty rc files; none reference vigil-aliases.sh.
 result=$(run_doctor "$home")
 rc=$(printf '%s\n' "$result" | head -1)
 out=$(printf '%s\n' "$result" | tail -n +2)

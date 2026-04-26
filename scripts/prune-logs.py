@@ -5,9 +5,9 @@ Usage:
     prune-logs.py [--log-dir DIR] [--older-than DURATION]
                   [--max-total-size SIZE] [--dry-run] [--quiet]
 
-Targets files matching session-YYYYMMDD-HHMMSS.{log,txt,json} — the
-scheme produced by vigil-aliases.sh. Files outside that pattern are
-never touched, so pointing --log-dir at the wrong directory is safe.
+Targets files matching session-YYYYMMDD-HHMMSS[-<repo>-<branch>].{log,txt,json}
+— the scheme produced by vigil-aliases.sh. Files outside that pattern
+are never touched, so pointing --log-dir at the wrong directory is safe.
 
 Defaults: --log-dir ~/vigil-logs, --older-than 180d. --max-total-size
 is only applied when explicitly set.
@@ -21,7 +21,7 @@ import sys
 import time
 from pathlib import Path
 
-SESSION_RE = re.compile(r'^session-(\d{8}-\d{6})\.(log|txt|json)$')
+SESSION_RE = re.compile(r'^session-(\d{8}-\d{6}[^.]*)\.(log|txt|json)$')
 LIVE_FLOOR_SECONDS = 10 * 60
 
 
@@ -43,9 +43,9 @@ def parse_size(s: str) -> int:
 
 
 def parse_stamp(stamp: str) -> float:
-    # YYYYMMDD-HHMMSS — local time, matching the session-filename format
-    # produced by vigil-aliases.sh via `date +%Y%m%d-%H%M%S`.
-    return time.mktime(time.strptime(stamp, '%Y%m%d-%H%M%S'))
+    # Filenames may carry a suffix after the timestamp (e.g. -repo-branch);
+    # slice to the fixed 15-char YYYYMMDD-HHMMSS portion before parsing.
+    return time.mktime(time.strptime(stamp[:15], '%Y%m%d-%H%M%S'))
 
 
 def collect_pairs(log_dir: Path):

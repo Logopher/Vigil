@@ -71,11 +71,18 @@ _vigil_run_with_logging() (
 
     # Capture git state before the session starts so the sidecar reflects
     # the repo state Claude was operating against, not the post-session state.
-    local _git_branch _git_head
-    _git_branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || true)
+    # _git_repo and _git_branch also form the filename suffix for browsability.
+    # Detached HEAD (branch == "HEAD") and non-git directories produce no suffix.
+    local _git_repo _git_branch _git_head _suffix=""
+    _git_repo=$(basename "$(git rev-parse --show-toplevel 2>/dev/null)" 2>/dev/null || true)
+    _git_branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null \
+        | sed 's/[^a-zA-Z0-9._-]/-/g' || true)
     _git_head=$(git rev-parse HEAD 2>/dev/null || true)
+    [[ -n "$_git_repo" && "$_git_repo" != "." \
+        && -n "$_git_branch" && "$_git_branch" != "HEAD" ]] \
+        && _suffix="-${_git_repo}-${_git_branch}"
 
-    local logfile="$VIGIL_LOG_DIR/session-$VIGIL_SESSION_ID.log"
+    local logfile="$VIGIL_LOG_DIR/session-${VIGIL_SESSION_ID}${_suffix}.log"
     case "$(uname)" in
         Darwin|*BSD)
             # BSD script(1): `script [-q] file command...`
@@ -314,8 +321,8 @@ vigil-log() {
         return 1
     fi
 
-    # Reverse to newest-first; filenames (session-YYYYMMDD-HHMMSS.txt)
-    # sort lexicographically the same as chronologically.
+    # Reverse to newest-first; the YYYYMMDD-HHMMSS timestamp prefix makes
+    # filenames sort lexicographically the same as chronologically.
     local files=()
     local i
     for ((i=${#all[@]}-1; i>=0; i--)); do

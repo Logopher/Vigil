@@ -41,7 +41,7 @@ Non-trivial changes go through an `architect` planning pass and a `code-reviewer
 
 `release-please` derives version bumps from conventional-commit types: `feat` bumps patch pre-1.0, `fix` bumps patch, `feat!` or a `BREAKING CHANGE:` footer bumps minor pre-1.0. The classifier (the commit author) needs a bright line for what counts as a breaking change. A commit is breaking when it changes any of the following:
 
-1. **Installed path layout** — contents of `~/.claude/` placed by Vigil, the `~/.config/vigil/` tree, or the `~/vigil-logs/` filename format (`session-YYYYMMDD-HHMMSS.{log,txt}`).
+1. **Installed path layout** — contents of `~/.claude/` placed by Vigil, the `~/.config/vigil/` tree, or the `~/vigil-logs/` filename format (`session-YYYYMMDD-HHMMSS[-<repo>-<branch>].{txt,json}`).
 2. **Shell wrapper names and argument shapes** — `vigil`, `vigil-dev`, `vigil-strict`, `vigil-yolo`, `vigil-log`, `vigil-log-prune`, `vigil-install-review`. Adding a wrapper is `feat`; renaming or removing one is breaking.
 3. **Policy names** — `strict`, `dev`, `yolo`. Renaming or removing is breaking; tightening allow-lists inside a policy is `feat`; adding a new policy is `feat`.
 4. **Default profile deny baseline** — *loosening* the baseline deny list is breaking (users rely on it for safety). Tightening or adding new denies is `feat`; removing a deny is breaking.

@@ -17,6 +17,7 @@ Exit codes:
   2  --from-hook self-check failed, or usage error
 """
 import argparse
+import glob as _glob
 import os
 import re
 import stat
@@ -165,7 +166,9 @@ def commit_diff(sha: str, cwd: str) -> str:
 # Session IDs are minted by vigil-aliases.sh as `date +%Y%m%d-%H%M%S`.
 # Validating the trailer value against this shape stops a hostile commit
 # from spoofing a path, embedding traversal, or planting misleading text
-# in the rendered output via an attacker-controlled trailer.
+# in the rendered output via an attacker-controlled trailer. Do not loosen
+# to include glob metacharacters (*, ?, [) — transcript_note relies on this
+# being glob-safe when constructing the search pattern.
 _SESSION_ID_RE = re.compile(r'^[0-9]{8}-[0-9]{6}$')
 
 
@@ -186,9 +189,11 @@ def transcript_note(session_id: str) -> str:
     if not _SESSION_ID_RE.match(session_id):
         return 'Transcript: invalid Vigil-Session id (rejected)'
     log_dir = os.environ.get('VIGIL_LOG_DIR') or os.path.expanduser('~/vigil-logs')
-    path = Path(log_dir) / f'session-{session_id}.txt'
-    if path.is_file():
-        return f'Transcript: {path}'
+    # Glob for the optional repo+branch suffix; escape session_id defensively
+    # even though _SESSION_ID_RE already excludes glob metacharacters.
+    matches = sorted(Path(log_dir).glob(f'session-{_glob.escape(session_id)}*.txt'))
+    if matches:
+        return f'Transcript: {matches[0]}'
     return f'Transcript: transcript not on this host (session {session_id})'
 
 

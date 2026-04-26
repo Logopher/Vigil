@@ -122,7 +122,13 @@ _vigil_run_with_logging() (
             ;;
         *)
             # util-linux script(1): `script -B file -c cmd`
-            script -B "$logfile" -c "command claude $*"
+            # printf '%q' (bash 4+) shell-escapes all words so spaces and
+            # metacharacters survive re-parsing. script(1) interprets the
+            # -c string via sh, not bash; printf '%q' uses $'...' ANSI-C
+            # quoting for control characters, which is bash-only syntax.
+            # In practice Claude arguments never contain control characters,
+            # so sh -c handles the output correctly for all real inputs.
+            script -B "$logfile" -c "$(printf '%q ' command claude "$@")"
             ;;
     esac
 

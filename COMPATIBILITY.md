@@ -6,7 +6,7 @@ Platform support for Vigil. "Tested" means the author has verified installation 
 |---|---|---|
 | Linux (WSL2, Ubuntu) | Tested | Primary development target. All tooling works. |
 | Linux (native, any distro with bash + git + util-linux `script`) | Adapted, untested | Should behave identically to WSL2. |
-| macOS | Adapted, untested | `vigil-aliases.sh` branches on `uname` to use BSD `script(1)` syntax. System `/bin/bash` is 3.2 and sufficient for every bash feature this repo uses. |
+| macOS | Adapted, untested | `vigil-aliases.sh` branches on `uname` to use BSD `script(1)` syntax. System `/bin/bash` is 3.2 and sufficient for the BSD branch; the Linux branch uses `printf '%q'` (bash 4+) but is unreachable on macOS. |
 | FreeBSD / OpenBSD / NetBSD | Adapted, untested | Same `script(1)` path as macOS. Bash is not installed by default on these systems — user must have bash on `$PATH` (`#!/usr/bin/env bash` depends on it). |
 | Windows (Git Bash / MSYS2) | Untested | `prune-worktrees.sh` contains explicit handling for MSYS2 path translation (basename-only matching to survive `C:/…` vs `/c/…` mismatch). Installer and the rest have not been exercised here. Symlink behavior on MSYS2 is historically unreliable. |
 | Windows native (PowerShell / cmd.exe) | Not supported | Install script is bash-only. Use WSL2 instead. |
@@ -38,7 +38,7 @@ All platform branches in the codebase:
 ## Known portability concerns
 
 - **`script(1)` flag differences.** BSD `script` and util-linux `script` take incompatible arguments. Addressed via `uname` branching.
-- **`bash` version.** macOS ships bash 3.2. All bash-specific features used (parameter expansion with `${var/#.../...}`, `[[ ]]`, `shopt -s nullglob`, `case` with `|` alternatives) are supported in 3.2.
+- **`bash` version.** macOS ships bash 3.2. All bash-specific features used on the BSD/macOS branch (parameter expansion with `${var/#.../...}`, `[[ ]]`, `shopt -s nullglob`, `case` with `|` alternatives) are supported in 3.2. The Linux/util-linux branch additionally uses `printf '%q'` for argument quoting in `vigil-aliases.sh`; this is bash 4+, but it is unreachable on macOS because it sits inside the `*)` arm of the `uname`-based branch that only executes on Linux.
 - **`find -mindepth` / `-maxdepth` / `-empty`.** GNU extensions adopted by BSD `find` on macOS 10.9+, FreeBSD 8+. Untested on older systems.
 - **Symlink creation.** `install.sh` uses `ln -s`. Linux and macOS: reliable. WSL2: reliable within the WSL filesystem. MSYS2/Git Bash on Windows: unreliable depending on user permissions and Windows version.
 - **`init.templateDir` interaction with `vigil-install-review`.** Vigil does not touch the user-level `init.templateDir` setting, but operators who have it configured (husky-style tooling, corporate templates) will hit the gate installer's collision probe when their template-seeded hooks land in `.git/hooks/`. Resolution is manual: either remove the competing template or skip Vigil's gate on that repo. The probe's full detection list is at the top of [`scripts/vigil-install-review`](scripts/vigil-install-review) under "Collision targets."

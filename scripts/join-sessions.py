@@ -6,7 +6,7 @@ most likely produced it, and computes the cost of that session from its JSONL.
 
 Usage:
     join-sessions.py --pyszz FILE [--log-dir DIR] [--repo DIR]
-                     [--pricing FILE] [--output FILE]
+                     [--pricing FILE] [--live-pricing] [--output FILE]
 
 pyszz input: B-SZZ JSON array — each record has fix_commit_hash (string) and
 inducing_commit_hash (list of strings). Produced by `python pyszz.py b_szz`.
@@ -46,12 +46,25 @@ import json
 import os
 import subprocess
 import sys
+import urllib.request
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-# Bundled default pricing table (USD per million tokens).
-# Model IDs verified against real Claude Code JSONL message.model values.
-# Update at https://www.anthropic.com/pricing when prices change.
+# LiteLLM is the canonical upstream pricing dataset; ccusage uses this same
+# URL internally (packages/internal/src/pricing.ts @ ryoppippi/ccusage 9f4129c5).
+# Keys use the form "anthropic/claude-<name>" or bare "claude-<name>".
+# Fields are per-token (not per-million); multiply by 1_000_000 to get our unit.
+_LITELLM_PRICING_URL = (
+    "https://raw.githubusercontent.com/BerriAI/litellm/main/"
+    "model_prices_and_context_window.json"
+)
+
+# Bundled offline fallback (USD per million tokens).
+# JSONL message.model values verified against real Claude Code sessions.
+# To refresh: fetch _LITELLM_PRICING_URL, filter ^(anthropic/claude-|claude-),
+# map input_cost_per_token * 1e6 → input, output_cost_per_token * 1e6 → output,
+# cache_creation_input_token_cost * 1e6 → cache_creation,
+# cache_read_input_token_cost * 1e6 → cache_read.
 _DEFAULT_PRICING: Dict[str, Dict[str, float]] = {
     "claude-opus-4-7": {
         "input": 15.0, "output": 75.0,
@@ -70,6 +83,61 @@ _DEFAULT_PRICING: Dict[str, Dict[str, float]] = {
         "cache_creation": 1.00, "cache_read": 0.08,
     },
 }
+
+
+def _fetch_litellm_pricing() -> Dict[str, Dict[str, float]]:
+    """Fetch the LiteLLM pricing dataset and return it in _DEFAULT_PRICING format.
+
+    Filters for Claude model keys (^anthropic/claude- or ^claude-) and converts
+    from per-token to per-million-token units. JSONL message.model values are
+    tried as both bare keys and with an "anthropic/" prefix by _lookup_price.
+
+    Returns an empty dict on any network, parse, or iteration failure; callers
+    fall back to _DEFAULT_PRICING.
+    """
+    try:
+        with urllib.request.urlopen(_LITELLM_PRICING_URL, timeout=10) as resp:
+            raw = json.load(resp)
+        result: Dict[str, Dict[str, float]] = {}
+        for key, entry in raw.items():
+            if not (key.startswith("anthropic/claude-") or key.startswith("claude-")):
+                continue
+            if not isinstance(entry, dict):
+                continue
+            inp = entry.get("input_cost_per_token")
+            out = entry.get("output_cost_per_token")
+            if inp is None or out is None:
+                continue
+            # cache fields default to 0; None and missing are both treated as
+            # zero cost (no distinction between "free" and "not applicable" in
+            # the upstream schema).
+            result[key] = {
+                "input":          float(inp) * 1_000_000,
+                "output":         float(out) * 1_000_000,
+                "cache_creation": float(entry.get("cache_creation_input_token_cost") or 0) * 1_000_000,
+                "cache_read":     float(entry.get("cache_read_input_token_cost") or 0) * 1_000_000,
+            }
+        return result
+    except Exception as exc:
+        print(f"warning: could not fetch {_LITELLM_PRICING_URL} ({exc}); "
+              "falling back to bundled table", file=sys.stderr)
+        return {}
+
+
+def _lookup_price(
+    model: str,
+    pricing: Dict[str, Dict[str, float]],
+) -> Optional[Dict[str, float]]:
+    """Return the pricing entry for model, trying bare key then anthropic/ prefix.
+
+    JSONL message.model values (e.g. "claude-sonnet-4-6") do not always match
+    LiteLLM keys (e.g. "anthropic/claude-sonnet-4-20250514") exactly. Trying
+    both forms catches the common case where LiteLLM indexes by bare name too.
+    Uses `is not None` rather than truthiness so a zero-price entry is not
+    silently skipped in favour of the prefixed key.
+    """
+    result = pricing.get(model)
+    return result if result is not None else pricing.get(f"anthropic/{model}")
 
 # Module-level cache for git author timestamp lookups. Single-run script;
 # unbounded growth is not a concern.
@@ -213,7 +281,7 @@ def _session_cost(
 
     cost = 0.0
     for model, counts in totals.items():
-        p = pricing.get(model)
+        p = _lookup_price(model, pricing)
         if p is None:
             continue  # unknown model — omit rather than error
         cost += (
@@ -263,6 +331,10 @@ def main(argv: List[str]) -> int:
     ap.add_argument("--pricing",
                     help="JSON file with per-model pricing in USD/MTok; "
                          "see bundled _DEFAULT_PRICING for format")
+    ap.add_argument("--live-pricing", action="store_true",
+                    help="fetch current pricing from LiteLLM dataset "
+                         "(same source ccusage uses); falls back to bundled "
+                         "table on network failure")
     ap.add_argument("--output",
                     help="write results to this file instead of stdout")
     args = ap.parse_args(argv)
@@ -297,6 +369,14 @@ def main(argv: List[str]) -> int:
         except json.JSONDecodeError as exc:
             print(f"error: pricing file is not valid JSON: {exc}", file=sys.stderr)
             return 1
+    elif args.live_pricing:
+        fetched = _fetch_litellm_pricing()
+        if fetched:
+            pricing = fetched
+        else:
+            print("warning: --live-pricing fetch failed; costs computed from "
+                  "bundled table (see _DEFAULT_PRICING in source for last-known "
+                  "prices and refresh instructions)", file=sys.stderr)
 
     pairs = _load_pyszz(args.pyszz)
     sidecars = _load_sidecars(Path(args.log_dir).expanduser())

@@ -23,6 +23,10 @@ The Vigil profile denies a fixed set of Bash patterns at the permission layer. A
 
 Authoritative list is in `settings.json` and `settings.local.json`. If a command isn't in any category and you're unsure, ask before invoking — don't probe by trying.
 
+### Settings writes are hard-blocked
+
+A `PreToolUse` hook rejects `Write`, `Edit`, and `MultiEdit` calls targeting `~/.claude/settings.json` and `~/.claude/settings.local.json`. This is a hard deny — it cannot be overridden at the permission prompt. Enforced by `validate-settings-write.sh`.
+
 ### Cross-project memory writes are blocked
 
 A `PreToolUse` hook rejects `Write`, `Edit`, and `MultiEdit` calls targeting `~/.claude/projects/<other-slug>/memory/**`. Writes to the current session's own project slug are allowed. This is enforced at runtime by `validate-memory-write.sh` and is not visible in the static permission layer.

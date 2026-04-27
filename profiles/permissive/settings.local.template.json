@@ -105,6 +105,11 @@
             "type": "command",
             "command": "{{PROFILE_DIR}}/hooks/validate-memory-write.sh",
             "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "{{PROFILE_DIR}}/hooks/validate-settings-write.sh",
+            "timeout": 5
           }
         ]
       }

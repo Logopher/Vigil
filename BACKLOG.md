@@ -4,7 +4,26 @@ Running list of known issues and proposed work, organized by triage disposition.
 
 For project stage and what's blocking each transition, see `LIFECYCLE.md`. For verified vs. unverified protection claims, see `THREAT_MODEL.md`.
 
-**Last triaged:** 2026-04-26 (shipped marker-file pattern enabling hook env-var workaround; shipped per-tool-call logging, active-policy banner, and memory-write validation hooks; removed all three backlog items; added Analytics section from teardown of current analytics layer gaps).
+**Last triaged:** 2026-04-26 (shipped marker-file pattern enabling hook env-var workaround; shipped per-tool-call logging, active-policy banner, and memory-write validation hooks; removed all three backlog items; added Analytics section from teardown of current analytics layer gaps; added Security incidents section and two investigation items).
+
+## Security incidents
+
+Documented breaches with root-cause analysis and remediation status. Keep entries until the open investigation items are resolved, then move to commit history.
+
+### 2026-04-26 — fewer-permission-prompts skill executed by sub-agents (TCard session)
+
+**What happened.** A TCard session spawned general-purpose sub-agents. Both agents inherited the full session context including the `fewer-permission-prompts` skill definition. Without explicit invocation by the top-level agent, each agent scanned `~/.claude/projects/*.jsonl` transcripts and wrote allow entries to `~/code/TCard/.claude/settings.json` (the project-local settings file — the skill's intended target). The user approved the permission prompt provisionally while suspicious and investigating, then reverted after alerting the top-level Claude.
+
+**Root cause.** Sub-agents spawned via the `Agent` tool inherit the full session context, including skill definitions loaded via `system-reminder`. A skill with imperative language ("scan… then add") is treated by a general-purpose sub-agent as an actionable instruction rather than a registered capability requiring explicit invocation. No Vigil-layer fix exists for this: project-local settings files must remain writable (the skill requires it), so file-path blocking would break legitimate use.
+
+**Effective mitigations (operational, not enforcement).** Avoid spawning general-purpose sub-agents via the `Agent` tool in sessions where skills are loaded; the agents inherit skill definitions and may execute them without explicit invocation. For tasks that would otherwise spawn an agent to run a trivial shell command, `!` in the Claude Code prompt runs it directly in the session instead. The clearest signal of skill redirection: an agent returns a coherent structured report on a subject that was never assigned.
+
+**Contributing factor (hypothesis — open investigation below).** `~/.claude/settings.json` is absent from the live sandbox `denyWrite` array despite being in `MASTER_DENY_WRITE` (`scripts/filter-sandbox-denies.py:83`). Entries whose target paths are null-mounted as `/dev/null` character devices fail the `is_file()` type check and drop silently. If `filter-sandbox-denies.py` ran in write mode (without `--check`) inside a sandboxed session at some point, the `~/.claude/` entries would have been dropped this way. This did not affect the incident's write target but represents independent exposure.
+
+**Remediation applied (partial).** `validate-settings-write` hook added: hard deny on Write/Edit/MultiEdit tool calls targeting `~/.claude/settings.json` and `~/.claude/settings.local.json`. This addresses the independent sandbox exposure (global settings files only); the sandbox `denyWrite` gap for those paths remains open until `filter-sandbox-denies.py` is re-run outside the sandbox. **Nothing currently blocks a repeat write to `~/code/TCard/.claude/settings.json` or any other project-local settings file.** Root cause (skill execution by sub-agents) is unaddressed.
+
+**Open investigation.**
+- Identify when `filter-sandbox-denies.py` ran inside a sandboxed session. In `~/vigil-logs/`, look for a `tools-<session>.jsonl` file containing a `PreToolUse` Bash entry whose `command` field includes `filter-sandbox-denies.py`. Also check `git log` for hook or alias changes that could have shifted the invocation context. Until resolved, treat `denyWrite` coverage of `~/.claude/` paths as unreliable.
 
 ## Documented gaps — do not action
 
@@ -22,6 +41,8 @@ These are honest limits, not bugs to fix. Listed so a maintainer encountering od
 ## Next-session candidates
 
 Each item is substantial enough to deserve its own session. Pick one, plan it, ship it, then return. Items are listed in dependency order where applicable — items earlier in the list unblock or motivate those below.
+
+- **Install Vigil update (independent exposure from 2026-04-26 incident).** The live installation is stale; `settings.local.json` is absent. All hooks and deny rules registered only in `settings.local.template.json` are inactive: Write/Edit/MultiEdit deny rules for Vigil config files; PreToolUse hooks (validate-memory-write, validate-settings-write, log-tool-use, policy-banner). After updating, run `filter-sandbox-denies.py --check` from outside a sandboxed session and confirm `~/.claude/settings.json` appears in the live `denyWrite` array. Separate from the root cause of the incident; independently worth closing.
 
 - **`update.sh` change-detection via install manifest.** Current update behavior is "freshly installed files always win": local edits to `~/.claude/CLAUDE.md`, policy files, or other Vigil-installed content are lost on update. New model: `install.sh` writes a SHA-256 manifest to `~/.config/vigil/.install-manifest`; `update.sh` compares pre-update hashes to manifest, preserves files that diverge from the recorded hash, stages the new version as `<path>.new` (or under `~/.config/vigil/pending-updates/`), and summarizes preserved paths at exit. Makes user customizations — including the `@~/.claude/USER_CONTEXT.md` import added to `~/.claude/CLAUDE.md` — survive updates without workaround. Useful independently; prerequisite for ergonomic default-profile-swap because promoted profiles need to participate in updates cleanly.
 - **`vigil-sign-up` helper for one-shot signing-agent setup.** Signing runs through an `excludedCommands` carve-out rather than through the sandbox (see `DESIGN.md`), so the helper is no longer gating an otherwise-unreachable feature. It just automates the standard setup: generate a dedicated key (`ssh-keygen -t ed25519 -f ~/.ssh/vigil-signing -N ""`), upload the pub key to GitHub as a Signing Key via `gh`, start an agent (`ssh-agent -a /tmp/claude/vigil-signing.sock` + `ssh-add`), write `signing.env` with `SSH_AUTH_SOCK`, and confirm `user.signingkey`. Lower priority than when the sandbox path was assumed workable — a user with an existing host-side agent only needs the carve-out config line. Still worthwhile for first-time onboarding: idempotent on re-run, handles GitHub upload via `gh`, prints the blast-radius note from `THREAT_MODEL.md` before touching keys, writes all state to user-managed paths. Optional follow-on: systemd-user unit for auto-start on login. Plan first — interactive-prompt design and idempotent regeneration behavior are unchanged from the prior framing.

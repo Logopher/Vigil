@@ -3,7 +3,7 @@
 # Hard-blocks Write / Edit / MultiEdit tool calls targeting
 # ~/.claude/settings.json and ~/.claude/settings.local.json.
 # Fails open on errors.
-# Mirrored to profiles/permissive/hooks/ — keep in sync.
+# Identical in profiles/default and profiles/permissive — keep in sync.
 
 set -euo pipefail
 

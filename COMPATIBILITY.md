@@ -8,6 +8,7 @@ Platform support for Vigil. "Tested" means the author has verified installation 
 | Linux (native, any distro with bash + git + util-linux `script`) | Adapted, untested | Should behave identically to WSL2. |
 | macOS | Adapted, untested | `vigil-aliases.sh` branches on `uname` to use BSD `script(1)` syntax. System `/bin/bash` is 3.2 and sufficient for the BSD branch; the Linux branch uses `printf '%q'` (bash 4+) but is unreachable on macOS. |
 | FreeBSD / OpenBSD / NetBSD | Adapted, untested | Same `script(1)` path as macOS. Bash is not installed by default on these systems — user must have bash on `$PATH` (`#!/usr/bin/env bash` depends on it). |
+| Windows (WSL2) | Tested (via Linux WSL2 row) | Install WSL2, then follow Linux instructions. The WSL2/Ubuntu row applies in full — all tooling works identically. |
 | Windows (Git Bash / MSYS2) | Untested | `prune-worktrees.sh` contains explicit handling for MSYS2 path translation (basename-only matching to survive `C:/…` vs `/c/…` mismatch). Installer and the rest have not been exercised here. Symlink behavior on MSYS2 is historically unreliable. |
 | Windows native (PowerShell / cmd.exe) | Not supported | Install script is bash-only. Use WSL2 instead. |
 
@@ -23,6 +24,17 @@ Platform support describes the OS and shell surface this tool targets. Launch co
 | Claude Code desktop app | Profile only | Same as the VS Code extension. |
 
 The discriminator between full coverage and profile-only is the bash wrappers, not the OS. Desktop-app users on macOS and Linux receive equivalent (partial) coverage; terminal users on macOS and Linux receive equivalent (full) coverage.
+
+## Agent compatibility
+
+Vigil is authored for Claude Code. Some layers partially transfer to other agents that implement Claude Code compatibility.
+
+| Agent | Coverage | Notes |
+|---|---|---|
+| Claude Code | Full | Intended target. Profile, sandbox config, hooks, session wrappers. |
+| OpenCode | Partial — rules and skills | OpenCode reads `~/.claude/CLAUDE.md` and `~/.claude/skills/` as fallbacks. Vigil's project rules and skills apply automatically for OpenCode users on supported platforms. Sandbox config and hooks are Claude Code-specific and do not transfer. |
+| Aider | None | No equivalent permission system, sandbox config, or hook surfaces. Vigil's deny-list *thinking* applies philosophically but has no configuration target. |
+| Other agents | None | No verified compatibility. |
 
 ## Commit-review gate
 

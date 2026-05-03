@@ -36,7 +36,7 @@ A document, web page, file content, or tool output contains instructions crafted
 
 - The permission layer catches obvious named denies but is defeatable via allowed shell builtins (`sh`, `bash`, `echo | base64 -d | sh`).
 - The sandbox layer is process-level (bubblewrap on Linux/WSL2, Seatbelt on macOS) and inherited by child processes; base64-decoded scripts and shell chains cannot bypass it for subprocess reads/writes/network. Verified working for both filesystem `denyRead` and network `allowedDomains: []` (see *Verification status* below).
-- Claude's own training declines to read sensitive paths (SSH keys, credential files) regardless of policy or sandbox state. Repeatedly observed during verification testing — an unplanned third defense layer that intercepts before the permission layer fires.
+- Claude's own training declines to read sensitive paths (SSH keys, credential files) regardless of policy or sandbox state. Repeatedly observed during verification testing — an unplanned third defense layer that intercepts before the permission layer fires. This layer is Claude-specific; users running other models (via OpenCode or a future multi-agent port) should not assume equivalent model-level refusals.
 
 **Residual exposure:** any action the agent can take through allowed channels. Notable in the `dev` policy: `git add` + `git commit` enable commit poisoning; environment variable interpolation (e.g., `$AWS_SECRET_ACCESS_KEY` in a Write call) can exfiltrate credentials the permission layer protects at the filesystem level. Plan mode (strict default) narrows this — the operator sees each action before it runs — but at the cost of friction.
 

@@ -4,7 +4,7 @@ Running list of known issues and proposed work, organized by triage disposition.
 
 For project stage and what's blocking each transition, see `LIFECYCLE.md`. For verified vs. unverified protection claims, see `THREAT_MODEL.md`.
 
-**Last triaged:** 2026-04-26 (shipped marker-file pattern enabling hook env-var workaround; shipped per-tool-call logging, active-policy banner, and memory-write validation hooks; removed all three backlog items; added Analytics section from teardown of current analytics layer gaps; added Security incidents section and two investigation items).
+**Last triaged:** 2026-05-06 (added OpenCode permission-layer port to Stage 2; added WSL2-on-Windows and agent compatibility docs to COMPATIBILITY.md; added multi-model third-defense-layer caveat to THREAT_MODEL.md). Prior: 2026-04-26 (shipped marker-file pattern enabling hook env-var workaround; shipped per-tool-call logging, active-policy banner, and memory-write validation hooks; removed all three backlog items; added Analytics section from teardown of current analytics layer gaps; added Security incidents section and two investigation items).
 
 ## Security incidents
 

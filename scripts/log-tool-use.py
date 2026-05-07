@@ -37,6 +37,7 @@ def main():
     hook_event = event_data.get('hook_event_name', '')
     record = {
         'ts': datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
+        'session_id': session_id,
         'event': hook_event,
         'tool': event_data.get('tool_name', ''),
         'tool_use_id': event_data.get('tool_use_id', ''),

@@ -22,7 +22,15 @@ A developer who has had a moment of *"wait, why did Claude just do that?"* — h
 
 The conceptual split between profile (identity, hooks, sandbox) and policy (posture: strict / dev / yolo) clicks quickly for this reader, because they've seen the same split elsewhere — AWS profiles, browser profiles, IAM policies.
 
-A second variant of the sweet-spot reader: a developer who wants to *understand* what their AI agent is doing across sessions, not just constrain it. The tool now produces per-session transcripts and sidecar JSON, plus a per-call tool-use log (`tools-<session>.jsonl`) that records every tool invocation with its input and response. `scripts/join-sessions.py` joins those logs with Claude Code's JSONL usage data for cost attribution. `ANALYTICS.md` documents the full observability picture for this reader.
+A second variant of the sweet-spot reader: a developer who wants to *understand* what their AI agent is doing across sessions, not just constrain it. Claude Code emits outputs (commits, tokens spent) but no retrospective on their quality or cost. Vigil's observability layer fills that gap — session transcripts and sidecar JSON record what happened, a per-call tool-use log (`tools-<session>.jsonl`) records every tool invocation with its input and response, and `scripts/join-sessions.py` joins those logs with Claude Code's JSONL usage data for cost attribution. `ANALYTICS.md` documents the full picture for this reader.
+
+The entry point for users who are *not* security-motivated is cost visibility. ccusage answers a question many Claude Code users have — "how much am I spending?" — that Claude Code itself does not. Three signals derive from there:
+
+- **Cache ratio as session-hygiene health.** A degrading prompt-cache read-to-write ratio is an early indicator that sessions are running too long or context isn't being managed, before any obvious failure surfaces.
+- **Subagent overhead audit.** Vigil's agent-gate workflow (architect plans, code-reviewer reviews each commit) adds predictable subagent cost; the join script attributes that cost so users can evaluate whether the gate is worth the spend.
+- **pyszz as retrospective quality signal.** As the codebase accumulates `fix:` commits, pyszz traces each back to the commit that introduced the bug. Repeat-offender commits — one introducing commit causing multiple downstream fixes — point at structural problems rather than incidental error.
+
+The pyszz signal depends on commit discipline. Its input pipeline keys off Angular-style commits (`fix(scope): …`), which the project's `code-reviewer` gate enforces — users following the agent-gate workflow get pyszz compatibility for free.
 
 ## Above the sweet spot
 

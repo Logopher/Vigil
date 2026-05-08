@@ -35,6 +35,10 @@ A `PreToolUse` hook rejects `Write`, `Edit`, and `MultiEdit` calls targeting `~/
 
 `git commit`, `git tag`, `git -C <path> commit`, `git -C <path> tag`, `git verify-commit`, and `git verify-tag` are listed in `excludedCommands` and run outside bubblewrap with host-level filesystem and network access. The `commit` and `tag` variants fire hook subprocesses (`pre-commit`, `prepare-commit-msg`, `commit-msg`, `post-commit`) that share that reach; `verify-commit` and `verify-tag` do not. See `THREAT_MODEL.md` for the blast-radius analysis.
 
+### Misleading ssh-keygen errors
+
+`ssh-keygen -Y sign -f <file>` reports `Couldn't load public key <file>: No such file or directory` for *both* genuine ENOENT and key-format-parse failures. If the file exists and is readable (`cat` it to verify) but ssh-keygen still errors this way, check the format: `head -1 <file>`. OpenSSH format starts with `ssh-rsa`, `ssh-ed25519`, etc.; SSH2/PuTTY format starts with `---- BEGIN SSH2 PUBLIC KEY ----`. PuTTY-format `.pub` files are a common source of this, especially when keys were generated via PuTTYgen and then used with `git` configured for SSH commit signing. Regenerate with `ssh-keygen -y -f <private-key> > <pub-key>` to produce an OpenSSH-format public key from the same private key material.
+
 ## Collaboration rules
 
 ### Commit discipline

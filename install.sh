@@ -34,8 +34,8 @@ Checked paths inside $(display_path "$CLAUDE_DIR")/:
   settings.json  settings.local.json  settings.local.template.json
   CLAUDE.md  hooks/  agents/  default.zip
 Checked paths inside $(display_path "$DEST_DIR")/:
-  vigil-aliases.sh  doctor.sh  scripts/  profiles/default  profiles/permissive
-  policies/*.json
+  vigil-aliases.sh  doctor.sh  scripts/  pyszz.yml
+  profiles/default  profiles/permissive  policies/*.json
 
 There is no --force. If re-installing, remove these manually first.
 Claude Code runtime state in $(display_path "$CLAUDE_DIR")/ (projects/, sessions/,
@@ -70,6 +70,7 @@ check_path "$CLAUDE_DIR/agents"
 check_path "$CLAUDE_DIR/default.zip"
 check_path "$DEST_DIR/vigil-aliases.sh"
 check_path "$DEST_DIR/doctor.sh"
+check_path "$DEST_DIR/pyszz.yml"
 check_path "$DEST_DIR/profiles/default"
 check_path "$DEST_DIR/profiles/permissive"
 check_path "$DEST_DIR/scripts"
@@ -107,6 +108,7 @@ mkdir -p "$DEST_DIR/policies" "$DEST_DIR/profiles" "$DEST_DIR/scripts" "$CLAUDE_
 cp "$REPO_DIR/vigil-aliases.sh" "$DEST_DIR/vigil-aliases.sh"
 cp "$REPO_DIR/doctor.sh" "$DEST_DIR/doctor.sh"
 chmod +x "$DEST_DIR/doctor.sh"
+cp "$REPO_DIR/pyszz.yml" "$DEST_DIR/pyszz.yml"
 
 # Management scripts the user can invoke later (e.g., after installing
 # a tool that creates new credential paths they want denied). The

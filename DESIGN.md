@@ -138,6 +138,18 @@ The raw `script(1)` `.log` is discarded after the strip succeeds; on failure it 
 
 The post-processing runs in the shell wrapper rather than as a Claude Code hook because hooks run inside the sandbox which previously scrubbed env vars set by the wrapper. Hooks now read session context from `~/.config/vigil/.vigil-session` (see below); per-tool-call logging and the memory-write gate use this pattern.
 
+## Recurring failure patterns
+
+Patterns that have caused multiple bugs in this repo's history. Captured here so future contributors recognize the shape faster — not a checklist to run before every change.
+
+**Schema not verified at refactor time.** When a refactor renames or moves a field — in the sidecar JSON shape, the JSONL schema, or settings keys — downstream consumers (`scripts/join-sessions.py`, the sidecar reader in `vigil-aliases.sh`, `tests/semantics.py`) tend to degrade silently rather than fail loudly: a `.get(key)` default produces a missing-but-not-erroring record, and the failure surfaces only when a report or join looks empty. The pattern is to change the producer and trust the consumers will notice; they often do not. Watch for: any rename in a record shape that crosses a script boundary, especially when consumers read with `.get(key)` defaults.
+
+**`set -e` plus `[[ ... ]] &&` idiom.** A line of the form `[[ -f "$x" ]] && do_something` reads as a no-op when the test is false, but actually returns non-zero — which under `errexit` aborts the whole script. The fix is `if [[ -f "$x" ]]; then do_something; fi`. The `&&` form is shorter and looks idiomatic, which is why it recurs. Watch for: any hook or shell wrapper that needs to no-op when a precondition is absent.
+
+**Stale mental model of installed layout versus repo layout.** Edits think in repo terms (the source under `profiles/default/`, with hooks bundled in `default.zip`) but the runtime resolves against the installed copy at `~/.claude/hooks/foo.sh` and `~/.config/vigil/scripts/`. Fixes that work in tests can fail at runtime when the executing path doesn't match post-`install.sh` reality, and vice versa. Watch for: any change that touches a hook command path, a `{{PROFILE_DIR}}` substitution, or a script invocation by absolute path.
+
+**Tests tracking implementation rather than threat model.** A test that asserts on the exact bytes of `settings.json` passes whenever the bytes happen to match — even when the effective permission decision has regressed. A test that exercises the actual deny outcome catches the regression. The first form is easier to write and more brittle; the second is what protects the security claim. Watch for: tests that compare JSON shape rather than evaluate the harness's effective behavior.
+
 ## Non-goals
 
 The tool deliberately does not:

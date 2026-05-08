@@ -72,9 +72,16 @@ def cmd_log_tool_use():
         return 0
 
     hook_event = event_data.get('hook_event_name', '')
+    # session_id is the Vigil-assigned ID (filename of this JSONL).
+    # harness_session_id is the Claude Code session UUID, which doubles as
+    # the filename of the per-session JSONL under ~/.claude/projects/<slug>/.
+    # Capturing both lets a downstream consumer construct an exact ccusage
+    # path (BACKLOG.md "Investigate direct JSONL session ID linkage")
+    # without an mtime heuristic.
     record = {
         'ts': datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
         'session_id': session_id,
+        'harness_session_id': event_data.get('session_id', ''),
         'event': hook_event,
         'tool': event_data.get('tool_name', ''),
         'tool_use_id': event_data.get('tool_use_id', ''),

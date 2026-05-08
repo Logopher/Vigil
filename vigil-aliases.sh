@@ -448,3 +448,15 @@ vigil-log-prune() {
     fi
     python3 "$script" "$@"
 }
+
+# Per-session cost and token analytics. Scans ~/vigil-logs/session-*.json
+# sidecars and joins each with its ccusage JSONL to produce a flat report.
+# Run `vigil-analyze --help` for flags (--format csv, --max-age-days, etc.).
+vigil-analyze() {
+    local script="$HOME/.config/vigil/scripts/vigil-sessions.py"
+    if [[ ! -f "$script" ]]; then
+        echo "vigil-analyze: $script not found" >&2
+        return 1
+    fi
+    python3 "$script" "$@"
+}

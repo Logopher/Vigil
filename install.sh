@@ -29,14 +29,17 @@ Copies Vigil into:
   $(display_path "$DEST_DIR")/    (aliases, policies, profile symlink)
   $(display_path "$CLAUDE_DIR")/              (default profile — real directory)
 
-The installer refuses to run if any destination already exists,
-including $(display_path "$CLAUDE_DIR"), $(display_path "$DEST_DIR/vigil-aliases.sh"),
-any $(display_path "$DEST_DIR/policies")/*.json, or $(display_path "$DEST_DIR/profiles/default").
+The installer refuses to run if any Vigil-owned destination already exists.
+Checked paths inside $(display_path "$CLAUDE_DIR")/:
+  settings.json  settings.local.json  settings.local.template.json
+  CLAUDE.md  hooks/  agents/  default.zip
+Checked paths inside $(display_path "$DEST_DIR")/:
+  vigil-aliases.sh  doctor.sh  scripts/  profiles/default  profiles/permissive
+  policies/*.json
 
 There is no --force. If re-installing, remove these manually first.
-If any destination holds Claude Code runtime state (credentials,
-sessions, history), move it somewhere safe before removal —
-the installer will not do it for you.
+Claude Code runtime state in $(display_path "$CLAUDE_DIR")/ (projects/, sessions/,
+history.jsonl, etc.) is not checked and will not be touched.
 USAGE
             exit 0
             ;;
@@ -58,7 +61,13 @@ check_path() {
     fi
 }
 
-check_path "$CLAUDE_DIR"
+check_path "$CLAUDE_DIR/settings.json"
+check_path "$CLAUDE_DIR/settings.local.json"
+check_path "$CLAUDE_DIR/settings.local.template.json"
+check_path "$CLAUDE_DIR/CLAUDE.md"
+check_path "$CLAUDE_DIR/hooks"
+check_path "$CLAUDE_DIR/agents"
+check_path "$CLAUDE_DIR/default.zip"
 check_path "$DEST_DIR/vigil-aliases.sh"
 check_path "$DEST_DIR/doctor.sh"
 check_path "$DEST_DIR/profiles/default"

@@ -160,6 +160,8 @@ The `.json` sidecar is written after each session and contains:
   "active_policy": "strict",
   "started_at": "2026-04-26T05:55:51",
   "ended_at": "2026-04-26T06:43:17",
+  "ended_at_git_head": "<sha-at-session-end>",
+  "commits_during_session": ["<sha-newest-first>", "..."],
   "ccusage_jsonl": "/home/grault/.claude/projects/-home-grault-code-claude-config/<uuid>.jsonl"
 }
 ```
@@ -169,10 +171,14 @@ state Claude operated against. `started_at` is local time with no timezone offse
 `VIGIL_SESSION_ID` string as the filename, so the two always match. `ended_at` is captured
 immediately after `script(1)` exits, in the same local-time format; the difference
 `ended_at − started_at` is session wall-clock duration. Cross-machine or DST-boundary
-timestamp comparisons require awareness of the recording machine's timezone. `ccusage_jsonl`
-is the most recently modified JSONL under `~/.claude/projects/` at session end, an
-approximation accurate for single-session workloads; concurrent sessions may alias to the
-wrong file.
+timestamp comparisons require awareness of the recording machine's timezone.
+`ended_at_git_head` is HEAD at session end; `commits_during_session` is the SHAs reachable
+from end-HEAD but not start-HEAD (newest-first), an empty list when HEAD didn't move, and
+`null` for non-git sessions or when the start- or end-HEAD failed to resolve. Together they
+let the SZZ join attribute an inducing commit to its session by exact SHA lookup — see
+"Integration opportunity" below. `ccusage_jsonl` is the most recently modified JSONL under
+`~/.claude/projects/` at session end, an approximation accurate for single-session
+workloads; concurrent sessions may alias to the wrong file.
 
 ### Role in observability
 
@@ -181,36 +187,47 @@ inducing commits by timestamp; the JSONL files measure token spend per session. 
 describe what was happening — what was being prompted, what context Claude was operating in,
 what decisions were made. Neither pyszz nor ccusage provides this.
 
-- **pyszz bridge**: An inducing commit's author timestamp can be matched against the sidecar
-  `started_at` covering that window. The `.txt` companion then provides the session narrative
-  for post-mortem analysis.
+- **pyszz bridge**: An inducing commit's SHA is matched against each sidecar's
+  `commits_during_session` list for an exact session→commit attribution. The author
+  timestamp / `started_at` heuristic is the fallback for legacy sidecars (recorded before
+  the field landed) and for inducing commits whose authoring session is no longer in
+  `~/vigil-logs/`. The `.txt` companion then provides the session narrative for post-mortem
+  analysis.
 - **ccusage bridge**: The sidecar's `ccusage_jsonl` path points directly to the session's
   JSONL file. Token counts can be read from that file without going through ccusage's
   project-level aggregation.
 
 ### Remaining gap
 
-No exact identifier links `~/vigil-logs/session-*` files to the corresponding
-`~/.claude/projects/*.jsonl` entries. The `ccusage_jsonl` approximation closes most of the
-gap, but concurrent sessions can alias. The per-tool-call logging hook
-(`PreToolUse`/`PostToolUse`, tracked in `BACKLOG.md`) is the eventual fix: it can write a
-session ID directly into the log. Until then, the approximation is reliable for the typical
-single-session workload.
+The per-tool-call logging hook has landed: `scripts/log-tool-use.py` writes the harness
+session ID into every `tools-<vigil-session-id>.jsonl` record. The JSONL schema notes
+above describe `sessionId` as a UUID matching the JSONL filename under
+`~/.claude/projects/<slug>/`; if that ID matches the harness session ID seen by hooks,
+an exact Vigil-session-to-JSONL mapping is derivable from the tools log alone.
+
+That equivalence has not been verified end-to-end, and the sidecar does not yet capture
+the link either way: `vigil-aliases.sh` populates `ccusage_jsonl` by an mtime scan over
+`~/.claude/projects/`, an approximation that can alias under concurrent sessions.
+Confirming the ID equivalence and replacing the scan with a direct lookup is tracked in
+`BACKLOG.md` ("Investigate direct JSONL session ID linkage").
 
 ---
 
 ## Integration opportunity
 
-All enabling dependencies are now in place. The join script (`scripts/join-sessions.py`)
-connects pyszz's bug attribution to session cost:
+All enabling dependencies are in place. `scripts/run-pyszz.sh` runs the full pipeline
+end-to-end: build the bugfix-commit input, invoke pyszz, cache its output by HEAD SHA,
+and (with `--join`) hand off to `scripts/join-sessions.py`, which connects pyszz's bug
+attribution to session cost:
 
 1. Run pyszz → inducing commit SHAs with **author** timestamps (preserved by normal
    `git rebase`; may shift under `--reset-author`, `filter-branch`, or `filter-repo`).
-2. Read sidecar `.json` files from `~/vigil-logs/` — each has `started_at`, `git_head`,
-   `ccusage_jsonl`.
-3. For each inducing commit, find the sidecar whose `started_at` is closest without
-   exceeding the author timestamp (the session most likely to have produced the commit).
-   `git_head` provides a stronger signal when the inducing commit was HEAD at session start.
+2. Read sidecar `.json` files from `~/vigil-logs/` — each has `started_at`, `ended_at`,
+   `git_head`, `ended_at_git_head`, `commits_during_session`, `ccusage_jsonl`.
+3. For each inducing commit, look up the sidecar whose `commits_during_session` list
+   contains the inducing SHA — exact session→commit attribution. Fall back to the sidecar
+   with the latest `started_at` not exceeding the inducing commit's author timestamp when
+   no sidecar claims the SHA (legacy sidecars or unknown sessions).
 4. Open the sidecar's `ccusage_jsonl` file; sum `message.usage` token counts from
    `type: "assistant"` lines per model; apply Anthropic pricing to get per-session cost.
 5. Output: `{inducing_sha, fix_sha, session_file, session_started_at, session_git_head,
@@ -220,6 +237,6 @@ The join script needs a pricing table as an input (or a small bundled default). 
 change occasionally; a `--pricing` JSON argument is cleaner than hardcoding. The `slug`
 field present in each JSONL entry provides a human-readable session label for the output.
 
-Once the per-tool-call hook lands and writes an explicit session ID into each log, the
-timestamp join can be replaced with a direct key lookup, and the `ccusage_jsonl`
-approximation can be retired.
+The session→commit join is exact for sessions recorded after `commits_during_session`
+landed; legacy sidecars use the timestamp fallback. The remaining approximation is the
+`ccusage_jsonl` mtime scan in `vigil-aliases.sh` — see "Remaining gap" above.

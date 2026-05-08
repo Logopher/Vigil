@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """summarize-sessions.py — Per-session tool-use summary from Vigil tool logs.
 
-Reads tools-<session>.jsonl files written by the log-tool-use.py hook and
+Reads tools-<session>.jsonl files written by the `vigil-hook log-tool-use` hook and
 outputs a JSON array with one summary row per session, joinable with sidecar
 data by session_id prefix.
 

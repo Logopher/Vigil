@@ -8,9 +8,10 @@ This repo holds Vigil, the user's personal paranoid Claude Code configuration, a
 
 Repo layout:
 
-- `profiles/<name>/` — per-profile bundle: `settings.json`, `settings.local.template.json`, `CLAUDE.md`, `hooks/*.sh`. The default profile is strict-by-construction.
+- `profiles/<name>/` — per-profile bundle: `settings.json`, `settings.local.template.json`, `CLAUDE.md`, `agents/`. The default profile is strict-by-construction and ships its `CLAUDE.md` plus `agents/` packaged in `default.zip` for installer extraction.
 - `policies/<name>.json` — permission overlays invoked per session via `claude --settings ~/.config/vigil/policies/<name>.json`. Current set: `strict`, `dev`, `yolo`.
-- `vigil-aliases.sh` — sourced from `~/.bashrc` (from the installed copy at `~/.config/vigil/vigil-aliases.sh`); wraps the `claude` CLI with `script(1)` and exposes `vigil`, `vigil-dev`, `vigil-strict`, `vigil-yolo`, and `vigil-log*` entry points. Each session writes `~/vigil-logs/session-<timestamp>-<repo>-<branch>.txt` (ANSI-stripped transcript with a `# vigil-policy` header) and a companion `.json` sidecar (cwd, git branch/head, active policy, start time, ccusage link). The raw `script(1)` `.log` is discarded after successful stripping.
+- `scripts/` — Python implementations and helpers. `vigil-hook` is the single dispatcher invoked by every Claude Code hook (sudo-installed to `/usr/local/bin/` at install time so a profile-confined attacker cannot replace it); the dispatcher inlines the validate-* and log-tool-use logic. Other load-bearing scripts include `filter-sandbox-denies.py` (deny-list source of truth), `prune-logs.py` (delegated to by `vigil-hook prune-logs`), `run-pyszz.sh`, and `join-sessions.py`. Additional helper scripts (`vigil-install-review`, `vigil-review.py`, `summarize-sessions.py`, `vigil-sessions.py`, `strip-ansi.py`) live alongside.
+- `vigil-aliases.sh` — sourced from `~/.bashrc` (from the installed copy at `~/.config/vigil/vigil-aliases.sh`); wraps the `claude` CLI with `script(1)` and exposes `vigil`, `vigil-dev`, `vigil-strict`, `vigil-yolo`, and `vigil-log*` entry points. Each session writes `~/vigil-logs/session-<timestamp>-<repo>-<branch>.txt` (ANSI-stripped transcript with a `# vigil-policy` header) and a companion `.json` sidecar (schema documented in `ANALYTICS.md`). The raw `script(1)` `.log` is discarded after successful stripping.
 - `install.sh` — copy-based installer; refuses to run if any Vigil-owned destination already exists. Checks specific files/dirs within `~/.claude/` rather than the directory itself, so Claude Code runtime state there does not block reinstallation.
 
 ## Architecture
@@ -22,23 +23,24 @@ Two layers of configuration, merged by the Claude Code harness at session start:
 
 A non-default profile is selected by setting `CLAUDE_CONFIG_DIR` for the session; the default (no env var) reads from `~/.claude`, which is the default profile.
 
-Hooks registered in the default profile:
+Hooks are dispatched through a single `vigil-hook` Python binary (sudo-installed at `/usr/local/bin/vigil-hook`). Subcommands wired in the default profile:
 
-- `SessionStart` / `SessionEnd` → `hooks/prune-worktrees.sh`
-- `SessionStart` → `hooks/prune-logs.sh` (retention for `~/vigil-logs/`; defaults 180d age, 2G cap)
-- `SessionStart` → `hooks/policy-banner.sh` (prints active policy and session ID to stderr)
-- `PreToolUse` / `PostToolUse` → `hooks/log-tool-use.sh` + `scripts/log-tool-use.py` (appends JSONL record per call to `~/vigil-logs/tools-<session>.jsonl`)
-- `PreToolUse` → `hooks/validate-memory-write.sh` + `scripts/validate-memory-write.py` (blocks `Write`/`Edit`/`MultiEdit` targeting another project's `memory/` directory)
+- `SessionStart` / `SessionEnd` → `vigil-hook prune-worktrees`
+- `SessionStart` → `vigil-hook prune-logs` (retention for `~/vigil-logs/`; defaults 180d age, 2G cap; delegates to `~/.config/vigil/scripts/prune-logs.py`)
+- `SessionStart` → `vigil-hook policy-banner` (prints active policy and session ID to stderr)
+- `PreToolUse` / `PostToolUse` → `vigil-hook log-tool-use` (appends JSONL record per call to `~/vigil-logs/tools-<session>.jsonl`)
+- `PreToolUse` → `vigil-hook validate-memory-write` (blocks `Write`/`Edit`/`MultiEdit` targeting another project's `memory/` directory)
+- `PreToolUse` → `vigil-hook validate-settings-write` (blocks `Write`/`Edit`/`MultiEdit` targeting `~/.claude/settings.json` and `~/.claude/settings.local.json`)
 
-Hook paths in the template use the `{{PROFILE_DIR}}` placeholder; the installer substitutes the installed profile directory when generating `settings.local.json`.
+Hook commands in `settings.json` are bare `vigil-hook <subcommand>` invocations resolved via PATH. The installer no longer substitutes `{{PROFILE_DIR}}` for hook paths; `settings.local.template.json` uses `{{HOME}}` for credential and dotfile deny entries.
 
 All hooks read session context from `~/.config/vigil/.vigil-session` (written by `vigil-aliases.sh` at launch; the harness strips shell-exported env vars before invoking hook subprocesses). Session-level transcripts are captured via `script(1)` from the shell wrappers in `vigil-aliases.sh`.
 
 The sandbox `denyRead` and `denyWrite` lists are *not* defined in `settings.json`. Their authoritative source is the master tuples (`MASTER_DENY_READ`, `MASTER_DENY_WRITE`) at the top of `scripts/filter-sandbox-denies.py`. The installer invokes that script after writing `settings.json`; the script overwrites the two arrays with the master entries that currently pass bubblewrap's mount-target type check. To change the desired deny set, edit the Python source — not the JSON files. The script is safe to re-run standalone (e.g., after installing a new CLI that creates `~/.aws/`) to refresh the lists without a full reinstall.
 
-## `profiles/default/hooks/prune-worktrees.sh`
+## Worktree pruning invariants
 
-Runs at session start and end against `<repo>/.claude/worktrees/`. Its invariants are load-bearing — preserve them when editing:
+`vigil-hook prune-worktrees` runs at session start and end against `<repo>/.claude/worktrees/`. Its invariants are load-bearing — preserve them when editing the dispatcher:
 
 1. Never removes a worktree directory with uncommitted changes.
 2. Never prunes git metadata for a dirty worktree (verified with a post-prune safety check that warns on violation).

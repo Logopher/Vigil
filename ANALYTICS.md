@@ -162,6 +162,7 @@ The `.json` sidecar is written after each session and contains:
   "ended_at": "2026-04-26T06:43:17",
   "ended_at_git_head": "<sha-at-session-end>",
   "commits_during_session": ["<sha-newest-first>", "..."],
+  "harness_session_id": "<uuid>",
   "ccusage_jsonl": "/home/grault/.claude/projects/-home-grault-code-claude-config/<uuid>.jsonl"
 }
 ```
@@ -176,9 +177,13 @@ timestamp comparisons require awareness of the recording machine's timezone.
 from end-HEAD but not start-HEAD (newest-first), an empty list when HEAD didn't move, and
 `null` for non-git sessions or when the start- or end-HEAD failed to resolve. Together they
 let the SZZ join attribute an inducing commit to its session by exact SHA lookup — see
-"Integration opportunity" below. `ccusage_jsonl` is the most recently modified JSONL under
-`~/.claude/projects/` at session end, an approximation accurate for single-session
-workloads; concurrent sessions may alias to the wrong file.
+"Integration opportunity" below. `harness_session_id` is the Claude Code session UUID,
+captured at session end by reading the first record of the per-tool-call log
+(`~/vigil-logs/tools-<vigil-session-id>.jsonl`); it doubles as the filename of the
+ccusage JSONL under `~/.claude/projects/<slug>/`, which is exactly what `ccusage_jsonl`
+points at. Sessions that made zero tool calls have no tools log; for those the writer
+falls back to a most-recent-mtime scan, which can alias under concurrent zero-tool
+sessions but is reliable for the typical workload.
 
 ### Role in observability
 
@@ -197,19 +202,17 @@ what decisions were made. Neither pyszz nor ccusage provides this.
   JSONL file. Token counts can be read from that file without going through ccusage's
   project-level aggregation.
 
-### Remaining gap
+### Linkage status
 
-The per-tool-call logging hook has landed: `scripts/log-tool-use.py` writes the harness
-session ID into every `tools-<vigil-session-id>.jsonl` record. The JSONL schema notes
-above describe `sessionId` as a UUID matching the JSONL filename under
-`~/.claude/projects/<slug>/`; if that ID matches the harness session ID seen by hooks,
-an exact Vigil-session-to-JSONL mapping is derivable from the tools log alone.
+The Vigil session sidecar and ccusage JSONL are now linked exactly. `vigil-hook
+log-tool-use` (the dispatcher invoked at every PreToolUse / PostToolUse) writes the
+harness session UUID into every record of `~/vigil-logs/tools-<vigil-session-id>.jsonl`.
+That UUID is the filename of the ccusage JSONL under `~/.claude/projects/<slug>/`,
+which `vigil-aliases.sh` looks up directly when writing the sidecar.
 
-That equivalence has not been verified end-to-end, and the sidecar does not yet capture
-the link either way: `vigil-aliases.sh` populates `ccusage_jsonl` by an mtime scan over
-`~/.claude/projects/`, an approximation that can alias under concurrent sessions.
-Confirming the ID equivalence and replacing the scan with a direct lookup is tracked in
-`BACKLOG.md` ("Investigate direct JSONL session ID linkage").
+The previous mtime-scan approximation remains as a fallback for sessions that made
+zero tool calls (no tools log → no harness ID to read). Concurrent zero-tool sessions
+can still alias under the fallback, but the mainline workload is exact.
 
 ---
 

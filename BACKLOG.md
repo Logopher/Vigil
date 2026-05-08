@@ -77,8 +77,6 @@ Improvements to the analytics infrastructure already shipped in `scripts/` and `
 
 - **Coordinated log pruning.** `hooks/prune-logs.sh` prunes session transcripts (`session-*.txt`) and sidecar JSON (`session-*.json`) by age and total size. It does not prune `tools-<session>.jsonl` files. As the tool-use log grows (one entry per tool call, every session), it will accumulate independently of the transcript pruning. Options: extend `prune-logs.sh` / `scripts/prune-logs.py` to include tool JSONL files in the retention calculation, keyed by the same session ID prefix, so the two are pruned together.
 
-- **Investigate direct JSONL session ID linkage.** The `ccusage_jsonl` approximation (most recently modified JSONL at session end) fails for concurrent sessions. Two paths to investigate: (a) does the harness pass a `CLAUDE_SESSION_ID` or similar environment variable that `vigil-aliases.sh` or a `SessionStart` hook could capture? (b) can `vigil-aliases.sh` read the JSONL filename from `~/.claude/projects/<slug>/` at session start, if the harness creates it immediately on launch? If either works, replace the approximation with a hard key. Documented as "Remaining gap" in ANALYTICS.md.
-
 ## Stage 2 — needs versioning / wider design
 
 These widen appeal to less-technical users without compromising the security model. Each removes a friction point but depends on infrastructure (versioning, the `vigil` umbrella CLI) that doesn't exist yet.

@@ -1,15 +1,20 @@
 #!/usr/bin/env bash
-# Install Vigil into ~/.config/vigil and ~/.claude.
+# Install Vigil into ~/.config/vigil, ~/.claude, and /usr/local/bin/.
 #
-# The installer refuses to run if any destination node already exists.
-# There is no --force flag: re-installation requires manual cleanup
-# first. This friction prevents the installer from ever clobbering
-# Claude Code's runtime state (credentials, sessions, history) that
-# lives alongside the profile in ~/.claude.
+# The installer refuses to run if any user-owned destination already exists.
+# There is no --force flag: re-installation requires manual cleanup first.
+# This friction prevents the installer from ever clobbering Claude Code's
+# runtime state (credentials, sessions, history) that lives alongside the
+# profile in ~/.claude.
 #
-# {{PROFILE_DIR}} is substituted to $HOME/.claude — the canonical
-# location of the default profile — not the convenience symlink at
-# $DEST_DIR/profiles/default.
+# vigil-hook (the dispatcher invoked by every PreToolUse/PostToolUse/
+# SessionStart/SessionEnd hook in settings.json) is installed to
+# /usr/local/bin/ via sudo so an attacker confined to the user's profile
+# can't easily replace it. The sudo prompt fires once during install.
+#
+# {{HOME}} is substituted in policy and template files. {{PROFILE_DIR}} is
+# substituted in profile templates to the live profile directory (e.g.
+# $HOME/.claude for default).
 set -euo pipefail
 shopt -s nullglob
 
@@ -26,10 +31,11 @@ for arg in "$@"; do
 Usage: ./install.sh
 
 Copies Vigil into:
-  $(display_path "$DEST_DIR")/    (aliases, policies, profile symlink)
-  $(display_path "$CLAUDE_DIR")/              (default profile — real directory)
+  $(display_path "$DEST_DIR")/      (aliases, policies, scripts)
+  $(display_path "$CLAUDE_DIR")/                (default profile — real directory)
+  /usr/local/bin/vigil-hook         (dispatcher; sudo install for tamper-resistance)
 
-The installer refuses to run if any Vigil-owned destination already exists.
+The installer refuses to run if any user-owned Vigil destination already exists.
 Checked paths inside $(display_path "$CLAUDE_DIR")/:
   settings.json  settings.local.json  settings.local.template.json
   CLAUDE.md  hooks/  agents/  default.zip
@@ -37,7 +43,10 @@ Checked paths inside $(display_path "$DEST_DIR")/:
   vigil-aliases.sh  doctor.sh  scripts/  pyszz.yml
   profiles/default  profiles/permissive  policies/*.json
 
-There is no --force. If re-installing, remove these manually first.
+The /usr/local/bin/vigil-hook destination is reinstalled in place via
+\`sudo install\`; existing copies are overwritten without prompting.
+
+There is no --force. If re-installing, remove user-owned conflicts manually first.
 Claude Code runtime state in $(display_path "$CLAUDE_DIR")/ (projects/, sessions/,
 history.jsonl, etc.) is not checked and will not be touched.
 USAGE
@@ -110,6 +119,19 @@ cp "$REPO_DIR/doctor.sh" "$DEST_DIR/doctor.sh"
 chmod +x "$DEST_DIR/doctor.sh"
 cp "$REPO_DIR/pyszz.yml" "$DEST_DIR/pyszz.yml"
 
+# Install vigil-hook to a root-owned system path. Hooks in settings.json
+# invoke this binary by bare name; PATH lookup resolves it. Placing it
+# outside ~/ raises the bar for an attacker who has compromised the user's
+# profile but lacks root — they can't replace the dispatcher to neutralize
+# validate-memory-write or validate-settings-write.
+if ! command -v sudo >/dev/null 2>&1; then
+    printf 'install.sh: sudo not found; cannot install /usr/local/bin/vigil-hook\n' >&2
+    exit 1
+fi
+echo "Installing vigil-hook to /usr/local/bin/ (sudo prompt may follow)..."
+sudo install -m 0755 -o root -g root \
+    "$REPO_DIR/scripts/vigil-hook" /usr/local/bin/vigil-hook
+
 # Management scripts the user can invoke later (e.g., after installing
 # a tool that creates new credential paths they want denied). The
 # `hooks/` subdirectory ships git-hook templates consumed by Phase D's
@@ -122,9 +144,11 @@ done < <(find "$REPO_DIR/scripts" -type f -print0)
 chmod +x "$DEST_DIR/scripts/"*.py 2>/dev/null || true
 chmod +x "$DEST_DIR/scripts/"*.sh 2>/dev/null || true
 chmod +x "$DEST_DIR/scripts/hooks/"* 2>/dev/null || true
-# vigil-install-review has no extension (operator-invoked command name);
-# the *.py / *.sh globs above don't catch it.
+# Extension-less binaries: vigil-install-review is operator-invoked,
+# vigil-hook is the per-user backup of the dispatcher (the live one runs
+# from /usr/local/bin/). Neither matches the *.py / *.sh globs above.
 chmod +x "$DEST_DIR/scripts/vigil-install-review" 2>/dev/null || true
+chmod +x "$DEST_DIR/scripts/vigil-hook" 2>/dev/null || true
 
 for src in "$REPO_DIR/policies/"*; do
     fname="$(basename "$src")"
@@ -153,10 +177,6 @@ for src in "$src_profile"/*; do
     else
         cp "$src" "$CLAUDE_DIR/$fname"
     fi
-done
-
-for hook in "$CLAUDE_DIR/hooks/"*.sh; do
-    chmod +x "$hook"
 done
 
 # Populate sandbox.filesystem.denyRead and denyWrite from the master
@@ -189,9 +209,6 @@ for src in "$src_perm"/*; do
     else
         cp "$src" "$PERMISSIVE_DEST/$fname"
     fi
-done
-for hook in "$PERMISSIVE_DEST/hooks/"*.sh; do
-    chmod +x "$hook"
 done
 # settings.json was produced by the template-copy loop above; this call
 # populates its sandbox.filesystem.denyRead and denyWrite arrays.

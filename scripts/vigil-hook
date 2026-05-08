@@ -1,0 +1,378 @@
+#!/usr/bin/env python3
+"""vigil-hook — single dispatcher for Vigil hook events.
+
+Installed to /usr/local/bin/ via sudo so an attacker confined to the user's
+profile can't easily replace it. Hooks in ~/.claude/settings.json invoke
+this binary by bare name with a subcommand argument; PATH lookup resolves
+it.
+
+Subcommands map 1:1 to the per-event scripts that previously lived under
+profiles/<name>/hooks/:
+    log-tool-use            PreToolUse / PostToolUse — append JSONL record
+    validate-memory-write   PreToolUse — block cross-project memory writes
+    validate-settings-write PreToolUse — block writes to Vigil core settings
+    policy-banner           SessionStart — print active policy to stderr
+    prune-worktrees         SessionStart / SessionEnd — clean stale worktrees
+    prune-logs              SessionStart — log retention (delegates to the
+                            user-installed prune-logs.py helper)
+
+All subcommands fail open (return 0) on parse errors or missing context so
+edge cases never accidentally block tool calls. The two validators exit 2
+with a JSON decision on stdout when they intend to deny.
+
+The harness strips shell-exported env vars before invoking hooks, so this
+script never depends on $HOME being set: os.path.expanduser('~') falls
+back to getpwuid() when HOME is empty.
+"""
+
+import json
+import os
+import os.path
+import shutil
+import subprocess
+import sys
+from datetime import datetime, timezone
+
+
+_WRITE_TOOLS = frozenset({'Write', 'Edit', 'MultiEdit'})
+
+
+def _vigil_session_marker():
+    """Parse ~/.config/vigil/.vigil-session, or return None.
+
+    The marker is written by vigil-aliases.sh at session launch and read by
+    every hook that needs session context. Returns None when the file is
+    absent (direct `claude` launch outside a Vigil wrapper) or unreadable.
+    """
+    home = os.path.expanduser('~')
+    path = os.path.join(home, '.config', 'vigil', '.vigil-session')
+    if not os.path.isfile(path):
+        return None
+    try:
+        with open(path) as f:
+            return json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
+# ---------- log-tool-use ----------
+
+def cmd_log_tool_use():
+    marker = _vigil_session_marker()
+    if not marker:
+        return 0
+    log_dir = marker.get('log_dir', '')
+    session_id = marker.get('session_id', '')
+    if not log_dir or not session_id:
+        return 0
+
+    try:
+        event_data = json.load(sys.stdin)
+    except (ValueError, OSError):
+        return 0
+
+    hook_event = event_data.get('hook_event_name', '')
+    record = {
+        'ts': datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
+        'session_id': session_id,
+        'event': hook_event,
+        'tool': event_data.get('tool_name', ''),
+        'tool_use_id': event_data.get('tool_use_id', ''),
+    }
+    if hook_event == 'PreToolUse':
+        record['input'] = event_data.get('tool_input', {})
+    elif hook_event == 'PostToolUse':
+        record['duration_ms'] = event_data.get('duration_ms')
+        if 'error' in event_data:
+            record['error'] = event_data['error']
+        else:
+            record['response'] = event_data.get('tool_response', {})
+
+    try:
+        os.makedirs(log_dir, exist_ok=True)
+        log_path = os.path.join(log_dir, f'tools-{session_id}.jsonl')
+        with open(log_path, 'a') as f:
+            f.write(json.dumps(record) + '\n')
+    except OSError:
+        pass
+    return 0
+
+
+# ---------- validate-memory-write ----------
+
+def cmd_validate_memory_write():
+    try:
+        event_data = json.load(sys.stdin)
+    except (ValueError, OSError, UnicodeDecodeError):
+        return 0
+    if not isinstance(event_data, dict):
+        return 0
+    if event_data.get('tool_name') not in _WRITE_TOOLS:
+        return 0
+
+    tool_input = event_data.get('tool_input', {})
+    file_path = tool_input.get('file_path', '')
+    if not file_path:
+        return 0
+
+    file_path = os.path.normpath(os.path.expanduser(file_path))
+    home = os.path.expanduser('~')
+    memory_base = os.path.join(home, '.claude', 'projects')
+
+    if not file_path.startswith(memory_base + os.sep):
+        return 0
+
+    rel = file_path[len(memory_base) + 1:]
+    parts = rel.split(os.sep, 2)
+    if len(parts) < 2 or parts[1] != 'memory':
+        return 0
+
+    target_slug = parts[0]
+    cwd = os.path.normpath(event_data.get('cwd', '').strip())
+    if not cwd or cwd == '.':
+        print('vigil-hook validate-memory-write: cwd missing from hook event; allowing write',
+              file=sys.stderr)
+        return 0
+
+    expected_slug = cwd.replace('/', '-')
+    if target_slug == expected_slug:
+        return 0
+
+    decision = {
+        'hookSpecificOutput': {
+            'hookEventName': 'PreToolUse',
+            'permissionDecision': 'deny',
+            'permissionDecisionReason': (
+                f'Cross-project memory write blocked: '
+                f'target slug {target_slug!r} does not match '
+                f'current session slug {expected_slug!r}. '
+                f'Memory writes are only allowed within the current project.'
+            ),
+        }
+    }
+    print(json.dumps(decision))
+    return 2
+
+
+# ---------- validate-settings-write ----------
+
+def cmd_validate_settings_write():
+    try:
+        event_data = json.load(sys.stdin)
+    except (ValueError, OSError, UnicodeDecodeError):
+        return 0
+    if not isinstance(event_data, dict):
+        return 0
+    if event_data.get('tool_name') not in _WRITE_TOOLS:
+        return 0
+
+    tool_input = event_data.get('tool_input', {})
+    file_path = tool_input.get('file_path', '')
+    if not file_path:
+        return 0
+
+    file_path = os.path.normpath(os.path.expanduser(file_path))
+    home = os.path.expanduser('~')
+    protected = frozenset([
+        os.path.join(home, '.claude', 'settings.json'),
+        os.path.join(home, '.claude', 'settings.local.json'),
+    ])
+
+    if file_path not in protected:
+        return 0
+
+    decision = {
+        'hookSpecificOutput': {
+            'hookEventName': 'PreToolUse',
+            'permissionDecision': 'deny',
+            'permissionDecisionReason': (
+                f'Settings write blocked: {file_path} is a Vigil-protected '
+                f'configuration file. Modifications require direct shell access '
+                f'outside the Claude session.'
+            ),
+        }
+    }
+    print(json.dumps(decision))
+    return 2
+
+
+# ---------- policy-banner ----------
+
+def cmd_policy_banner():
+    marker = _vigil_session_marker()
+    if not marker:
+        return 0
+    policy = marker.get('policy', '')
+    session_id = marker.get('session_id', '')
+    if not policy:
+        return 0
+    print(f'[vigil] active policy: {policy}  |  session: {session_id}',
+          file=sys.stderr)
+    return 0
+
+
+# ---------- prune-worktrees ----------
+
+def _git(repo, *args):
+    """Run git -C repo *args; return (success, stdout)."""
+    try:
+        result = subprocess.run(
+            ['git', '-C', repo, *args],
+            capture_output=True, text=True, check=False,
+        )
+        return result.returncode == 0, result.stdout
+    except (OSError, subprocess.SubprocessError):
+        return False, ''
+
+
+def cmd_prune_worktrees():
+    """Port of profiles/<name>/hooks/prune-worktrees.sh.
+
+    Three load-bearing invariants — see the project CLAUDE.md before changing:
+      1. Never removes a worktree directory with uncommitted changes.
+      2. Never prunes git metadata for a dirty worktree.
+      3. Only deletes claude/* branches fully merged into main (git branch -d).
+    Worktrees are matched by basename (not full path) to survive Windows /
+    MSYS2 path-format mismatches.
+    """
+    cwd = os.getcwd()
+    ok, repo_root = _git(cwd, 'rev-parse', '--show-toplevel')
+    if not ok:
+        return 0
+    repo_root = repo_root.strip()
+    if not repo_root:
+        return 0
+
+    worktree_dir = os.path.join(repo_root, '.claude', 'worktrees')
+
+    ok, porcelain = _git(repo_root, 'worktree', 'list', '--porcelain')
+    active_names = set()
+    active_branches = set()
+    if ok:
+        for line in porcelain.splitlines():
+            if line.startswith('worktree '):
+                active_names.add(os.path.basename(line[len('worktree '):]))
+            elif line.startswith('branch refs/heads/'):
+                active_branches.add(line[len('branch refs/heads/'):])
+
+    dirty_worktrees = []
+    protected_names = set()
+    if os.path.isdir(worktree_dir):
+        for entry in sorted(os.listdir(worktree_dir)):
+            full = os.path.join(worktree_dir, entry)
+            if not os.path.isdir(full):
+                continue
+            if entry in active_names:
+                continue
+            if os.path.isfile(os.path.join(full, '.git')):
+                ok2, status = _git(full, 'status', '--porcelain')
+                if ok2 and status.strip():
+                    dirty_worktrees.append(entry)
+                    protected_names.add(entry)
+
+    _git(repo_root, 'worktree', 'prune')
+
+    # Invariant #2 safety check.
+    for entry in protected_names:
+        full = os.path.join(worktree_dir, entry)
+        if not os.path.isfile(os.path.join(full, '.git')):
+            print(f'WARNING: git metadata was pruned for dirty worktree: {entry}')
+
+    # Invariant #1: only remove clean stale directories.
+    if os.path.isdir(worktree_dir):
+        for entry in sorted(os.listdir(worktree_dir)):
+            full = os.path.join(worktree_dir, entry)
+            if not os.path.isdir(full):
+                continue
+            if entry in active_names or entry in protected_names:
+                continue
+            try:
+                shutil.rmtree(full)
+            except OSError:
+                pass
+        try:
+            for entry in os.listdir(worktree_dir):
+                full = os.path.join(worktree_dir, entry)
+                if os.path.isdir(full):
+                    try:
+                        os.rmdir(full)
+                    except OSError:
+                        pass
+        except OSError:
+            pass
+
+    if dirty_worktrees:
+        print('Stale worktrees with uncommitted changes (not removed):')
+        for w in dirty_worktrees:
+            print(f'  {w}')
+
+    # Invariant #3: safe-delete only.
+    ok, branches = _git(repo_root, 'branch', '--list', 'claude/*',
+                         '--format=%(refname:short)')
+    unmerged = []
+    if ok:
+        for branch in branches.splitlines():
+            branch = branch.strip()
+            if not branch or branch in active_branches:
+                continue
+            del_ok, _ = _git(repo_root, 'branch', '-d', branch)
+            if del_ok:
+                print(f'Deleted merged branch: {branch}')
+            else:
+                unmerged.append(branch)
+
+    if unmerged:
+        print('Unmerged orphan claude/* branches (need manual review):')
+        for b in unmerged:
+            print(f'  {b}')
+
+    return 0
+
+
+# ---------- prune-logs ----------
+
+def cmd_prune_logs():
+    """Delegate to the user-installed prune-logs.py helper.
+
+    The helper has its own CLI (vigil-log-prune wrapper) and stays under
+    ~/.config/vigil/scripts/ — vigil-hook does not duplicate its logic.
+    """
+    home = os.path.expanduser('~')
+    helper = os.path.join(home, '.config', 'vigil', 'scripts', 'prune-logs.py')
+    if not os.path.isfile(helper):
+        return 0
+    try:
+        subprocess.run(['python3', helper, *sys.argv[2:]], check=False)
+    except (OSError, subprocess.SubprocessError):
+        pass
+    return 0
+
+
+# ---------- dispatcher ----------
+
+_COMMANDS = {
+    'log-tool-use':            cmd_log_tool_use,
+    'validate-memory-write':   cmd_validate_memory_write,
+    'validate-settings-write': cmd_validate_settings_write,
+    'policy-banner':           cmd_policy_banner,
+    'prune-worktrees':         cmd_prune_worktrees,
+    'prune-logs':              cmd_prune_logs,
+}
+
+
+def main():
+    prog = os.path.basename(sys.argv[0])
+    if len(sys.argv) < 2:
+        print(f'usage: {prog} <subcommand>', file=sys.stderr)
+        print('subcommands: ' + ', '.join(sorted(_COMMANDS)), file=sys.stderr)
+        return 2
+
+    handler = _COMMANDS.get(sys.argv[1])
+    if handler is None:
+        print(f'{prog}: unknown subcommand: {sys.argv[1]}', file=sys.stderr)
+        return 2
+    return handler()
+
+
+if __name__ == '__main__':
+    sys.exit(main())

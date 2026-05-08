@@ -326,12 +326,10 @@ vigil_set_default() {
                 dirty+=("$HOME/.claude/$f")
             fi
         done
-        for dir in hooks agents; do
-            if [[ -d "$HOME/.claude/$dir" ]] && \
-               ! diff -rq "$HOME/.claude/$dir" "$current_bundle/$dir" >/dev/null 2>&1; then
-                dirty+=("$HOME/.claude/$dir/")
-            fi
-        done
+        if [[ -d "$HOME/.claude/agents" ]] && \
+           ! diff -rq "$HOME/.claude/agents" "$current_bundle/agents" >/dev/null 2>&1; then
+            dirty+=("$HOME/.claude/agents/")
+        fi
         if [[ ${#dirty[@]} -gt 0 ]]; then
             printf 'vigil set-default: local edits detected — copy them to the bundle or pass --force to overwrite:\n' >&2
             printf '  %s\n' "${dirty[@]}" >&2
@@ -352,14 +350,11 @@ vigil_set_default() {
             rm -f "$HOME/.claude/$f.bak"
         fi
     done
-    for dir in hooks agents; do
-        if [[ -d "$staging/$dir" ]]; then
-            [[ -d "$HOME/.claude/$dir" ]] && mv -- "$HOME/.claude/$dir" "$HOME/.claude/$dir.bak"
-            mv -- "$staging/$dir" "$HOME/.claude/$dir"
-            rm -rf "$HOME/.claude/$dir.bak"
-            chmod +x "$HOME/.claude/$dir/"*.sh 2>/dev/null || true
-        fi
-    done
+    if [[ -d "$staging/agents" ]]; then
+        [[ -d "$HOME/.claude/agents" ]] && mv -- "$HOME/.claude/agents" "$HOME/.claude/agents.bak"
+        mv -- "$staging/agents" "$HOME/.claude/agents"
+        rm -rf "$HOME/.claude/agents.bak"
+    fi
     rm -rf "$staging"
 
     # Regenerate settings.local.json so hook paths resolve to ~/.claude,

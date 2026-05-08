@@ -57,5 +57,43 @@
       "Bash(telnet:*)",
       "Bash(ftp:*)"
     ]
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "*",
+        "hooks": [
+          { "type": "command", "command": "vigil-hook prune-worktrees", "timeout": 15 },
+          { "type": "command", "command": "vigil-hook prune-logs",      "timeout": 15 },
+          { "type": "command", "command": "vigil-hook policy-banner",   "timeout": 5  }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "matcher": "*",
+        "hooks": [
+          { "type": "command", "command": "vigil-hook prune-worktrees", "timeout": 15 }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          { "type": "command", "command": "vigil-hook log-tool-use",            "timeout": 5 },
+          { "type": "command", "command": "vigil-hook validate-memory-write",   "timeout": 5 },
+          { "type": "command", "command": "vigil-hook validate-settings-write", "timeout": 5 }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          { "type": "command", "command": "vigil-hook log-tool-use", "timeout": 5 }
+        ]
+      }
+    ]
   }
 }

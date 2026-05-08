@@ -60,7 +60,7 @@
   "hooks": {
     "SessionStart": [
       {
-        "matcher": "",
+        "matcher": "*",
         "hooks": [
           {
             "type": "command",
@@ -82,7 +82,7 @@
     ],
     "SessionEnd": [
       {
-        "matcher": "",
+        "matcher": "*",
         "hooks": [
           {
             "type": "command",
@@ -94,7 +94,7 @@
     ],
     "PreToolUse": [
       {
-        "matcher": "",
+        "matcher": "*",
         "hooks": [
           {
             "type": "command",
@@ -116,7 +116,7 @@
     ],
     "PostToolUse": [
       {
-        "matcher": "",
+        "matcher": "*",
         "hooks": [
           {
             "type": "command",

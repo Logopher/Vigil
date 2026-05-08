@@ -132,13 +132,31 @@ _vigil_run_with_logging() (
             ;;
     esac
 
+    # Capture HEAD and commits made during the session so the SZZ join in
+    # scripts/join-sessions.py can resolve session→inducing-commit by exact
+    # SHA lookup instead of the closest-author-timestamp heuristic. Both
+    # variables stay empty (and the sidecar emits null) when pre-session HEAD
+    # was unresolvable or when the session-end git rev-parse fails — e.g.,
+    # non-git directory, or repo deleted mid-session.
+    local _ended_at_git_head="" _commits_during_session=""
+    if [[ -n "$_git_head" ]]; then
+        _ended_at_git_head=$(git rev-parse HEAD 2>/dev/null || true)
+        if [[ -n "$_ended_at_git_head" ]]; then
+            # git log range is empty when HEAD is unchanged. Force-push or
+            # rebase mid-session can leave _git_head unreachable; the range
+            # then errors and produces an empty string, which the consumer
+            # interprets the same as "no commits made."
+            _commits_during_session=$(git log "$_git_head..HEAD" --format=%H 2>/dev/null || true)
+        fi
+    fi
+
     # Write sidecar metadata JSON. started_at is derived from VIGIL_SESSION_ID
     # (local time, no timezone suffix) so it matches the filename even if the
     # session ran past midnight. ended_at is captured immediately after script(1)
     # exits, so it reflects wall-clock session end in the same local-time format.
     # ccusage_jsonl is the most recently modified JSONL file under
-    # ~/.claude/projects/ — an approximation accurate enough until per-tool-call
-    # hooks land a direct session ID link.
+    # ~/.claude/projects/ — an approximation accurate enough until the wrapper
+    # captures the harness session ID directly.
     if command -v python3 >/dev/null 2>&1; then
         local _sid="$VIGIL_SESSION_ID"
         local _started_at="${_sid:0:4}-${_sid:4:2}-${_sid:6:2}T${_sid:9:2}:${_sid:11:2}:${_sid:13:2}"
@@ -150,16 +168,27 @@ try:
     ccusage_jsonl = max(files, key=os.path.getmtime) if files else ''
 except OSError:
     ccusage_jsonl = ''
+end_head = sys.argv[7] or None
+commits_str = sys.argv[8]
+if commits_str:
+    commits_during_session = commits_str.splitlines()
+elif end_head is not None:
+    commits_during_session = []
+else:
+    commits_during_session = None
 print(json.dumps({
-    'cwd':           sys.argv[1],
-    'git_branch':    sys.argv[2],
-    'git_head':      sys.argv[3],
-    'active_policy': sys.argv[4],
-    'started_at':    sys.argv[5],
-    'ended_at':      sys.argv[6],
-    'ccusage_jsonl': ccusage_jsonl,
+    'cwd':                    sys.argv[1],
+    'git_branch':             sys.argv[2],
+    'git_head':               sys.argv[3],
+    'active_policy':          sys.argv[4],
+    'started_at':             sys.argv[5],
+    'ended_at':               sys.argv[6],
+    'ended_at_git_head':      end_head,
+    'commits_during_session': commits_during_session,
+    'ccusage_jsonl':          ccusage_jsonl,
 }, indent=2))
 " "$PWD" "$_git_branch" "$_git_head" "$active_policy" "$_started_at" "$_ended_at" \
+            "$_ended_at_git_head" "$_commits_during_session" \
             > "${logfile%.log}.json" 2>/dev/null || true
     fi
 

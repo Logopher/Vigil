@@ -154,20 +154,42 @@ _vigil_run_with_logging() (
     # (local time, no timezone suffix) so it matches the filename even if the
     # session ran past midnight. ended_at is captured immediately after script(1)
     # exits, so it reflects wall-clock session end in the same local-time format.
-    # ccusage_jsonl is the most recently modified JSONL file under
-    # ~/.claude/projects/ — an approximation accurate enough until the wrapper
-    # captures the harness session ID directly.
+    # ccusage_jsonl is resolved via the harness session ID embedded in the
+    # tools log by vigil-hook log-tool-use; falls back to a most-recent-mtime
+    # scan when the tools log is absent (sessions that made zero tool calls).
     if command -v python3 >/dev/null 2>&1; then
         local _sid="$VIGIL_SESSION_ID"
         local _started_at="${_sid:0:4}-${_sid:4:2}-${_sid:6:2}T${_sid:9:2}:${_sid:11:2}:${_sid:13:2}"
         local _ended_at; _ended_at=$(date +%Y-%m-%dT%H:%M:%S)  # split form preserves exit status
         python3 -c "
-import json, sys, os, glob as _g
-files = _g.glob(os.path.expanduser('~/.claude/projects/**/*.jsonl'), recursive=True)
+import json, re, sys, os, glob as _g
+# argv[9]  = VIGIL_LOG_DIR
+# argv[10] = VIGIL_SESSION_ID
+_UUID_RE = re.compile(r'^[0-9a-fA-F-]+\$')
+ccusage_jsonl = ''
+harness_sid = ''
+tools_path = os.path.join(sys.argv[9], f'tools-{sys.argv[10]}.jsonl')
 try:
-    ccusage_jsonl = max(files, key=os.path.getmtime) if files else ''
-except OSError:
-    ccusage_jsonl = ''
+    with open(tools_path) as f:
+        first = json.loads(f.readline())
+    candidate = first.get('harness_session_id', '') or ''
+    # Guard against path-traversal in case the field is ever corrupted; the
+    # value is written by vigil-hook (trusted) but a regex check costs nothing.
+    if _UUID_RE.match(candidate):
+        harness_sid = candidate
+        matches = _g.glob(os.path.expanduser(
+            f'~/.claude/projects/*/{harness_sid}.jsonl'))
+        if matches:
+            ccusage_jsonl = matches[0]
+except (OSError, ValueError):
+    pass
+if not ccusage_jsonl:
+    files = _g.glob(os.path.expanduser('~/.claude/projects/**/*.jsonl'),
+                    recursive=True)
+    try:
+        ccusage_jsonl = max(files, key=os.path.getmtime) if files else ''
+    except OSError:
+        ccusage_jsonl = ''
 end_head = sys.argv[7] or None
 commits_str = sys.argv[8]
 if commits_str:
@@ -185,10 +207,12 @@ print(json.dumps({
     'ended_at':               sys.argv[6],
     'ended_at_git_head':      end_head,
     'commits_during_session': commits_during_session,
+    'harness_session_id':     harness_sid or None,
     'ccusage_jsonl':          ccusage_jsonl,
 }, indent=2))
 " "$PWD" "$_git_branch" "$_git_head" "$active_policy" "$_started_at" "$_ended_at" \
             "$_ended_at_git_head" "$_commits_during_session" \
+            "$VIGIL_LOG_DIR" "$VIGIL_SESSION_ID" \
             > "${logfile%.log}.json" 2>/dev/null || true
     fi
 

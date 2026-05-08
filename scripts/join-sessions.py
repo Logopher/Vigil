@@ -9,7 +9,10 @@ Usage:
                      [--pricing FILE] [--live-pricing] [--output FILE]
 
 pyszz input: B-SZZ JSON array — each record has fix_commit_hash (string) and
-inducing_commit_hash (list of strings). Produced by `python pyszz.py b_szz`.
+inducing_commit_hash (list of strings). Produced by running pyszz_v2 with a
+B-SZZ conf:
+    cd ~/code/pyszz_v2
+    python3 main.py <bugfix.json> <conf.yml> [repos_dir]
 
 Output: JSON array, one object per (fix, inducing) pair:
     {
@@ -23,9 +26,14 @@ Output: JSON array, one object per (fix, inducing) pair:
         "cost_basis":         "jsonl" | "unknown"
     }
 
-Session matching: the sidecar with the latest started_at not exceeding the
-inducing commit's author timestamp is selected. Author timestamps are stable
-across normal git rebase; they may shift under --reset-author or filter-repo.
+Session matching: tries an exact SHA lookup first — the sidecar whose
+commits_during_session list contains the inducing SHA. Falls back to the
+sidecar with the latest started_at not exceeding the inducing commit's
+author timestamp when no sidecar claims the SHA. The fallback covers legacy
+sidecars (recorded before commits_during_session landed) and inducing
+commits whose authoring session is no longer in ~/vigil-logs. Author
+timestamps are stable across normal git rebase; they may shift under
+--reset-author or filter-repo.
 
 Cost computation: token counts are summed from type:assistant entries in the
 session JSONL, excluding sidechain entries (isSidechain == true). Sessions
@@ -234,6 +242,23 @@ def _closest_before(sidecars: List[dict],
     return best
 
 
+def _sidecar_for_sha(sidecars: List[dict], sha: str) -> Optional[dict]:
+    """Return the latest sidecar whose commits_during_session contains sha.
+
+    Sidecars are oldest-first; the loop overwrites best on each match so the
+    result is the most recent claimant — defensive against the (unexpected)
+    case of two sidecars listing the same SHA. Returns None for legacy
+    sidecars (no commits_during_session) and for SHAs no recorded session
+    claims; callers fall back to the timestamp heuristic.
+    """
+    best = None
+    for s in sidecars:
+        commits = s.get("commits_during_session")
+        if isinstance(commits, list) and sha in commits:
+            best = s
+    return best
+
+
 def _session_cost(
     jsonl_path: str,
     pricing: Dict[str, Dict[str, float]],
@@ -384,7 +409,11 @@ def main(argv: List[str]) -> int:
     results = []
     for fix_sha, inducing_sha in pairs:
         author_ts = _git_author_ts(inducing_sha, repo)
-        sidecar = _closest_before(sidecars, author_ts) if author_ts else None
+        # Prefer exact lookup via commits_during_session; fall back to the
+        # author-timestamp heuristic for legacy sidecars or unknown sessions.
+        sidecar = _sidecar_for_sha(sidecars, inducing_sha)
+        if sidecar is None and author_ts is not None:
+            sidecar = _closest_before(sidecars, author_ts)
 
         record: dict = {
             "inducing_sha":       inducing_sha,

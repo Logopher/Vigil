@@ -80,6 +80,7 @@ MASTER_DENY_WRITE = (
     # Vigil-installed config — belt-and-suspenders subprocess coverage.
     # Entries that do not exist on the host drop out with a diagnostic (type check).
     "~/.claude/CLAUDE.md",
+    "~/.claude/USER_CONTEXT.md",
     "~/.claude/settings.json",
     "~/.claude/hooks/",
     "~/.claude/agents/",

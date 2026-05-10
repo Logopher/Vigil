@@ -30,9 +30,9 @@ Hooks are dispatched through a single `vigil-hook` Python binary (sudo-installed
 - `SessionStart` → `vigil-hook policy-banner` (prints active policy and session ID to stderr)
 - `PreToolUse` / `PostToolUse` → `vigil-hook log-tool-use` (appends JSONL record per call to `~/vigil-logs/tools-<session>.jsonl`)
 - `PreToolUse` → `vigil-hook validate-memory-write` (blocks `Write`/`Edit`/`MultiEdit` targeting another project's `memory/` directory)
-- `PreToolUse` → `vigil-hook validate-settings-write` (blocks `Write`/`Edit`/`MultiEdit` targeting `~/.claude/settings.json` and `~/.claude/settings.local.json`)
+- `PreToolUse` → `vigil-hook validate-settings-write` (blocks `Write`/`Edit`/`MultiEdit` targeting `~/.claude/settings.json`, `~/.claude/settings.local.json`, and `~/.claude/keybindings.json`)
 
-Hook commands in `settings.json` are bare `vigil-hook <subcommand>` invocations resolved via PATH. The installer no longer substitutes `{{PROFILE_DIR}}` for hook paths; `settings.local.template.json` uses `{{HOME}}` for credential and dotfile deny entries.
+Hook commands in `settings.json` are bare `vigil-hook <subcommand>` invocations resolved via PATH. The installer no longer substitutes `{{PROFILE_DIR}}` for hook paths. `settings.local.template.json` is currently a stub (empty `permissions.deny` array) — host-local credential and dotfile coverage now lives entirely at the sandbox layer via `MASTER_DENY_*` in `scripts/filter-sandbox-denies.py`.
 
 All hooks read session context from `~/.config/vigil/.vigil-session` (written by `vigil-aliases.sh` at launch; the harness strips shell-exported env vars before invoking hook subprocesses). Session-level transcripts are captured via `script(1)` from the shell wrappers in `vigil-aliases.sh`.
 

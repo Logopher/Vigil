@@ -183,6 +183,7 @@ def cmd_validate_settings_write():
     protected = frozenset([
         os.path.join(home, '.claude', 'settings.json'),
         os.path.join(home, '.claude', 'settings.local.json'),
+        os.path.join(home, '.claude', 'keybindings.json'),
     ])
 
     if file_path not in protected:

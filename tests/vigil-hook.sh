@@ -10,10 +10,10 @@
 #   3. $REPO_DIR/scripts/vigil-hook (the in-repo source — for CI / pre-install)
 #
 # Tests cover:
-#   validate-settings-write — denies Write/Edit/MultiEdit to ~/.claude/settings.json
-#                             and ~/.claude/settings.local.json; allows Bash and
-#                             writes to other paths; fails open on empty/garbage
-#                             stdin.
+#   validate-settings-write — denies Write/Edit/MultiEdit to ~/.claude/settings.json,
+#                             ~/.claude/settings.local.json, and
+#                             ~/.claude/keybindings.json; allows Bash and writes
+#                             to other paths; fails open on empty/garbage stdin.
 #   validate-memory-write   — denies cross-project ~/.claude/projects/<other-slug>/
 #                             memory/** writes; allows same-slug, non-memory
 #                             paths, and non-write tools; fails open on missing
@@ -84,6 +84,18 @@ expect_deny validate-settings-write \
 expect_deny validate-settings-write \
     'Write to ~/.claude/settings.local.json' \
     "$(printf '{"tool_name":"Write","tool_input":{"file_path":"%s/.claude/settings.local.json","content":"x"}}' "$HOME")"
+
+expect_deny validate-settings-write \
+    'Write to ~/.claude/keybindings.json' \
+    "$(printf '{"tool_name":"Write","tool_input":{"file_path":"%s/.claude/keybindings.json","content":"x"}}' "$HOME")"
+
+expect_deny validate-settings-write \
+    'Edit to ~/.claude/keybindings.json' \
+    "$(printf '{"tool_name":"Edit","tool_input":{"file_path":"%s/.claude/keybindings.json","old_string":"a","new_string":"b"}}' "$HOME")"
+
+expect_deny validate-settings-write \
+    'MultiEdit to ~/.claude/keybindings.json' \
+    "$(printf '{"tool_name":"MultiEdit","tool_input":{"file_path":"%s/.claude/keybindings.json"}}' "$HOME")"
 
 section "validate-settings-write — allows"
 

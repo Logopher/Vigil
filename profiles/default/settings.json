@@ -14,7 +14,9 @@
       "git verify-commit *",
       "git verify-tag *"
     ],
-    "filesystem": {},
+    "filesystem": {
+      "allowWrite": ["~/.cache/uv/"]
+    },
     "network": {
       "allowedDomains": [],
       "allowAllUnixSockets": false,

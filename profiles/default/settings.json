@@ -23,6 +23,9 @@
       "allowLocalBinding": false
     }
   },
+  "worktree": {
+    "baseRef": "head"
+  },
   "permissions": {
     "defaultMode": "plan",
     "deny": [

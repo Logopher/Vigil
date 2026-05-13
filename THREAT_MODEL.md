@@ -105,6 +105,7 @@ Directions this tool could reasonably grow into but doesn't today. See `BACKLOG.
 
 - **Container- or VM-grade isolation.** The sandbox is bubblewrap/Seatbelt configuration, not a full namespace + cgroup + read-only-root container or a VM. A stronger runtime is plausible future work; today's posture trades isolation strength for ergonomic use of the operator's real `$HOME`.
 - **Cloud / remote-agent environments.** The design assumes a single-user laptop. The env-scrub layer, session-log location, commit-review gate's pre-push assumption, and `{{HOME}}`/`{{CWD}}` substitutions would all need rethinking for cloud-hosted deployment.
+- **Cryptographic manifest signing via Sigstore / cosign.** The commit-review gate's `.git/review-gate/.manifest` currently relies on SHA-256 hashes for tamper detection. Sigstore (with `cosign`) is the standard FOSS approach for signing software artifacts; adoption would extend the manifest's tamper resistance from hash-based to cryptographic signatures backed by a transparency log, aligning Vigil with the supply-chain-security ecosystem (SLSA framework, OpenSSF Scorecard). The hash-based self-check stays load-bearing today; the upgrade is plausible future work tracked in `BACKLOG.md` (Stage 2).
 
 ### Not anticipated
 

@@ -1,8 +1,8 @@
 # GENERALIZATION.md
 
-Vigil's expected generalization beyond Claude Code: candidate shapes, the load-bearing design distinction, and the discipline that keeps each option open until the second substrate is actually in use.
+Vigil's expected generalization beyond Claude Code: candidate shapes, the load-bearing design distinction, and the discipline that kept each option open until shape #1 was selected by the Dashboard-into-Vigil-v2 consolidation. See "2026-05-13 calibration" below.
 
-This document is design exploration, parallel to `VM_DESIGN.md`. Today's Vigil is Claude-Code-specific; this doc names the shape question without committing to an answer.
+This document is design exploration, parallel to `VM_DESIGN.md`. Today's Vigil is Claude-Code-specific; this doc named the shape question and the agent-agnostic / agent-specific distinction. The 2026-05-13 calibration records how the question was answered. The three-shapes survey is retained because the agent-agnostic / agent-specific design discipline still governs how every Vigil abstraction is built — regardless of which shape was selected.
 
 ## Why generalization is expected
 
@@ -75,6 +75,25 @@ The decision should be deferred until the operator is actually running multiple 
 
 Until one of these triggers fires, the right move is to keep every new Vigil abstraction defensible on both axes — agent-agnostic where genuinely agent-agnostic, agent-specific where genuinely Claude-Code-specific.
 
+## 2026-05-13 calibration: shape resolved toward #1 via Dashboard consolidation
+
+The three-shapes analysis above was written treating the shape question as open. A subsequent architectural commitment — the Dashboard codebase moving into the Vigil repository as a long-lived `v2` branch (`~/code/dashboard/BACKLOG.md:23`; criteria in `~/planning/dashboard-path.md` "v2-merge gate") — effectively resolves the shape question toward shape #1 (single agent-agnostic Vigil). Under v2:
+
+- The Dashboard substrate (Tauri 2 + React 19 + Rust) provides the agent-agnostic runtime: policy engine (Dashboard's `README.md:56` names this "Policy engine (internal name: Vigil)"), LLM proxy, capability enforcement, sanitized render path, observability via `SourceAdapter` ingest.
+- **Current Vigil becomes the first concrete agent profile bundle — the Claude Code adapter.** Sandbox tuning, deny-list contents, `~/.claude/` install discipline, and the `excludedCommands` carve-out for git-signing stay packaged as the Claude-Code-specific profile.
+- **A local-LLM adapter is the planned second concrete bundle** — required to satisfy both the v2-merge gate (Claude + local LLM side-by-side dogfooded use) and the discipline-rule of "two concrete bundles before shipping a generalized Vigil" stated in the section above.
+- The agent-agnostic / agent-specific split (this doc's load-bearing distinction) is preserved across the consolidation rather than dissolved by it.
+
+What this means for the rest of this document: the "three candidate shapes" framing stays as historical context — it records the design space and the reasoning that selected shape #1. The "what activates the decision" triggers above are partly retrospective; the local-LLM-adoption trigger (#1 in that list) was effectively the one that fired.
+
+What still defers: the v2-merge gate itself, the local-LLM adapter implementation, and any decisions about whether further adapters (OpenCode, Codex, Goose) get profile bundles or stay as documentation-only fallbacks. The OpenCode `~/.claude/CLAUDE.md` fallback already in `COMPATIBILITY.md` continues to be the lightest-touch option for adjacent runtimes.
+
+Cross-references for the calibration:
+- `~/code/dashboard/BACKLOG.md:23` — v2-branch-into-Vigil-repo commitment.
+- `~/planning/dashboard-path.md` "v2-merge gate" — full criteria and dependencies.
+- `~/planning/vigil-path.md` 2026-05-12 addendum, "v2 consolidation" subsection — strategic framing.
+- `~/.claude/projects/-home-grault/memory/vigil_v2_dashboard_consolidation.md` — durable record (when the cross-project memory hook is unblocked).
+
 ## Cross-references
 
 - `THREAT_MODEL.md` — the four-adversary model that generalizes; specifically the third-defense-layer caveat (Claude-specific model-level refusals) that does *not* generalize.
@@ -86,4 +105,4 @@ Until one of these triggers fires, the right move is to keep every new Vigil abs
 
 ---
 
-*GENERALIZATION.md — Vigil — Rev 1 (2026-05-12)*
+*GENERALIZATION.md — Vigil — Rev 2 (2026-05-13)*

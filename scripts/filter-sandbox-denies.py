@@ -82,6 +82,8 @@ MASTER_DENY_WRITE = (
     "~/.claude/CLAUDE.md",
     "~/.claude/USER_CONTEXT.md",
     "~/.claude/settings.json",
+    "~/.claude/settings.local.json",
+    "~/.claude/keybindings.json",
     "~/.claude/hooks/",
     "~/.claude/agents/",
     "~/.claude/skills/",

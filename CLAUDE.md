@@ -60,6 +60,7 @@ Paths whose contents are part of Vigil's security posture. Do not modify them fr
 - Permission lists in the JSON files are order-insensitive but duplicates between `allow`/`deny` resolve to `deny` — add to `deny` rather than removing from `allow` when tightening.
 - Use the colon matcher form (`Bash(rm:*)`) for deny/allow patterns; the space form (`Bash(rm *)`) is non-standard.
 - Edits to this repo do not take effect until `./install.sh` copies the changes into `~/.config/vigil/`. **Do not run `install.sh` yourself — that is the developer's job.** Make the edits, commit them, and leave installation to the developer.
+- GitHub Actions in .github/workflows/ must be pinned by full SHA with a trailing # vX.Y.Z comment (e.g., actions/checkout@<sha> # v4.2.2). Local actions (uses: ./...) are exempt. Enforced by tests/check-action-pins.sh (auto-discovered by tests/run.sh).
 
 ## Collaboration rules
 

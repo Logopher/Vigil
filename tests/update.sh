@@ -193,7 +193,10 @@ check_contents "session data restored after rollback" \
 section "-y skips prompt"
 home=$(mktmp)
 install_into "$home"
-out=$(HOME="$home" bash "$REPO_DIR/update.sh" -y </dev/null 2>&1)
+out=$(HOME="$home" \
+    VIGIL_HOOK_INSTALL_DIR="$home/dev-bin" \
+    VIGIL_UNSAFE_SKIP_SUDO=1 \
+    bash "$REPO_DIR/update.sh" -y </dev/null 2>&1)
 rc=$?
 if [[ $rc -eq 0 ]] && [[ -f "$home/.claude/settings.json" ]]; then
     pass "update -y proceeds without stdin"

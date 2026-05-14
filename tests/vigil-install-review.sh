@@ -39,7 +39,10 @@ GIT_ID=(-c user.email=test@example.invalid -c user.name=vigil-install-test)
 # refuses to clobber an existing layout, so each case can't get its
 # own install. Per-case isolation is at the repo level instead.
 SHARED_HOME=$(mktmp)
-HOME="$SHARED_HOME" bash "$REPO_DIR/install.sh" >/dev/null 2>&1 || {
+HOME="$SHARED_HOME" \
+    VIGIL_HOOK_INSTALL_DIR="$SHARED_HOME/dev-bin" \
+    VIGIL_UNSAFE_SKIP_SUDO=1 \
+    bash "$REPO_DIR/install.sh" >/dev/null 2>&1 || {
     echo "FATAL: install.sh failed against shared HOME" >&2
     exit 2
 }

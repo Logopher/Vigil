@@ -61,7 +61,10 @@ install_into() {
     stub_home "$home"
     # Run from repo root so {{CWD}} in MASTER_DENY_WRITE expands to a
     # directory with .git/, consistent with the CWD used by run_doctor.
-    (cd "$REPO_DIR" && HOME="$home" bash "$REPO_DIR/install.sh" >/dev/null)
+    (cd "$REPO_DIR" && HOME="$home" \
+        VIGIL_HOOK_INSTALL_DIR="$home/dev-bin" \
+        VIGIL_UNSAFE_SKIP_SUDO=1 \
+        bash "$REPO_DIR/install.sh" >/dev/null)
     # ~/.claude/skills and ~/.claude/commands are in MASTER_DENY_WRITE but
     # are not created by install.sh (user-managed). Create them after install
     # so the installer's conflict-check does not see a pre-existing ~/.claude,

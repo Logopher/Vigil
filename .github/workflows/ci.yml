@@ -36,8 +36,6 @@ jobs:
             update.sh \
             doctor.sh \
             vigil-aliases.sh \
-            profiles/default/hooks/prune-worktrees.sh \
-            profiles/default/hooks/prune-logs.sh \
             scripts/hooks/pre-push \
             scripts/hooks/prepare-commit-msg
 

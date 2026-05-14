@@ -72,41 +72,10 @@ _vigil_run_with_logging() (
         _prev="$_arg"
     done
 
-    # Write session marker so hooks can read session context — the harness
-    # strips shell-exported env vars before invoking hook subprocesses.
-    # Hooks are read-only consumers of this file; the sandbox deny list
-    # blocks any in-process Write tool from modifying it.
-    # Concurrent vigil sessions are not supported: a second session silently
-    # overwrites this file (vigil set-default guards via pgrep; no such guard
-    # runs here — callers are expected not to stack sessions).
-    local _session_file="$HOME/.config/vigil/.vigil-session"
-    local _session_tmp _launched_at _safe_policy=""
-    _launched_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-    # Validate active_policy before embedding: it is user-supplied via --settings.
-    # VIGIL_SESSION_ID (date format) and _launched_at (ISO 8601) are safe as-is.
-    # VIGIL_LOG_DIR is derived from $HOME which has no JSON-unsafe chars on Linux.
-    [[ "$active_policy" =~ ^[a-zA-Z0-9_-]+$ ]] && _safe_policy="$active_policy"
-    # Atomic write (temp + rename) prevents partial-read by a hook that fires
-    # immediately at SessionStart. Trap registered only on successful write so
-    # a failed mktemp does not delete a surviving concurrent session's marker.
-    # Function runs in a subshell (...) — EXIT fires when the whole session
-    # ends, after script(1) returns and all post-processing completes.
-    if _session_tmp="$(mktemp "$HOME/.config/vigil/.vigil-session.XXXXXX" 2>/dev/null)"; then
-        if printf '{\n  "session_id": "%s",\n  "log_dir": "%s",\n  "policy": "%s",\n  "launched_at": "%s"\n}\n' \
-                "$VIGIL_SESSION_ID" "$VIGIL_LOG_DIR" "$_safe_policy" "$_launched_at" \
-                > "$_session_tmp" \
-            && mv -- "$_session_tmp" "$_session_file"; then
-            trap 'rm -f -- "$_session_file"' EXIT
-        else
-            rm -f -- "$_session_tmp"
-        fi
-    else
-        echo "vigil: warning: could not create session marker in ~/.config/vigil/ — hooks will run without session context" >&2
-    fi
-
     # Capture git state before the session starts so the sidecar reflects
     # the repo state Claude was operating against, not the post-session state.
-    # _git_repo and _git_branch also form the filename suffix for browsability.
+    # _git_repo and _git_branch also form the filename suffix for browsability
+    # and are embedded in the per-session JSON read by hooks.
     # Detached HEAD (branch == "HEAD") and non-git directories produce no suffix.
     local _git_repo _git_branch _git_head _suffix=""
     _git_repo=$(basename "$(git rev-parse --show-toplevel 2>/dev/null)" 2>/dev/null || true)
@@ -116,6 +85,62 @@ _vigil_run_with_logging() (
     [[ -n "$_git_repo" && "$_git_repo" != "." \
         && -n "$_git_branch" && "$_git_branch" != "HEAD" ]] \
         && _suffix="-${_git_repo}-${_git_branch}"
+
+    # Per-session handoff file. Hooks read this through a /proc-based
+    # bridge keyed on VIGIL_WRAPPER_PID (see scripts/vigil-hook), so each
+    # concurrent vigil shell gets its own file — the previous shared
+    # ~/.config/vigil/.vigil-session singleton silently raced when two
+    # sessions overlapped. BASHPID is the subshell's own PID (bash 4+);
+    # the ${...:-$$} fallback gives bash 3.2 (macOS) the parent shell's
+    # PID, which preserves per-terminal uniqueness but loses concurrency
+    # within one terminal — acceptable since the /proc bridge is also
+    # Linux-only (see COMPATIBILITY.md).
+    local _wrapper_pid="${BASHPID:-$$}"
+    export VIGIL_WRAPPER_PID="$_wrapper_pid"
+
+    local _sessions_dir="$HOME/.config/vigil/sessions"
+    if ! mkdir -p "$_sessions_dir" 2>/dev/null; then
+        echo "vigil: warning: could not create $_sessions_dir — hooks will run without session context" >&2
+    fi
+    # chmod is reported on failure (no 2>/dev/null) so wrong-permission
+    # situations are visible — falling back silently would mean a hook
+    # reads or writes a file in a world-readable dir without warning.
+    chmod 700 "$_sessions_dir" || true
+
+    local _session_file="$_sessions_dir/wrapper-$_wrapper_pid.json"
+    local _session_tmp _launched_at _safe_policy="" _safe_repo="" _safe_branch=""
+    _launched_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+    # Validate every embedded value before printf-ing it into JSON.
+    # VIGIL_SESSION_ID (date format) and _launched_at (ISO 8601) are safe as-is.
+    # VIGIL_LOG_DIR is derived from $HOME which has no JSON-unsafe chars on Linux.
+    [[ "$active_policy" =~ ^[a-zA-Z0-9_-]+$ ]] && _safe_policy="$active_policy"
+    [[ "$_git_repo" =~ ^[a-zA-Z0-9._-]+$ ]] && _safe_repo="$_git_repo"
+    [[ "$_git_branch" =~ ^[a-zA-Z0-9._-]+$ ]] && _safe_branch="$_git_branch"
+    # Atomic write (temp + rename) prevents partial-read by a hook that fires
+    # immediately at SessionStart. Trap registered only on successful write so
+    # a failed mktemp does not delete a sibling session's wrapper file.
+    # Function runs in a subshell (...) — EXIT fires when the whole session
+    # ends, after script(1) returns and all post-processing completes.
+    # The bridged file at <harness_session_id>.json is owned by SessionEnd;
+    # this trap only removes the wrapper-<pid>.json if SessionStart never
+    # promoted it (e.g., claude crashed before any hook fired).
+    # A later commit adds a ~/vigil-logs/.bridge-<vigil_session_id> marker
+    # that the SessionStart hook writes for the wrapper's post-exec
+    # sidecar lookup; its cleanup will be added to this trap when it is
+    # introduced.
+    if _session_tmp="$(mktemp "$_sessions_dir/.wrapper-$_wrapper_pid.XXXXXX" 2>/dev/null)"; then
+        if printf '{\n  "vigil_session_id": "%s",\n  "log_dir": "%s",\n  "policy": "%s",\n  "launched_at": "%s",\n  "repo": "%s",\n  "branch": "%s"\n}\n' \
+                "$VIGIL_SESSION_ID" "$VIGIL_LOG_DIR" "$_safe_policy" "$_launched_at" \
+                "$_safe_repo" "$_safe_branch" \
+                > "$_session_tmp" \
+            && mv -- "$_session_tmp" "$_session_file"; then
+            trap 'rm -f -- "$_session_file"' EXIT
+        else
+            rm -f -- "$_session_tmp"
+        fi
+    else
+        echo "vigil: warning: could not create session marker in $_sessions_dir — hooks will run without session context" >&2
+    fi
 
     local logfile="$VIGIL_LOG_DIR/session-${VIGIL_SESSION_ID}${_suffix}.log"
     case "$(uname)" in

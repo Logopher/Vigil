@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Tier 4 prune-worktrees.sh invariant tests. Each case constructs a
-# minimal git fixture in a tmpdir, runs the hook, and asserts the
-# three load-bearing invariants from the default profile CLAUDE.md:
+# Tier 4 vigil-hook prune-worktrees invariant tests. Each case constructs
+# a minimal git fixture in a tmpdir, runs the dispatcher subcommand, and
+# asserts the three load-bearing invariants from the project CLAUDE.md:
 #   1. Never removes a worktree directory with uncommitted changes.
 #   2. Never prunes git metadata for a dirty worktree.
 #   3. Only deletes claude/* branches fully merged into main.
@@ -12,7 +12,7 @@ set -uo pipefail
 shopt -s nullglob
 
 REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-HOOK="$REPO_DIR/profiles/default/hooks/prune-worktrees.sh"
+HOOK="$REPO_DIR/scripts/vigil-hook"
 
 failed=0
 pass() { printf '  PASS  %s\n' "$1"; }
@@ -62,7 +62,7 @@ add_wt() {
 
 run_hook() {
     local repo="$1"
-    ( cd "$repo" && bash "$HOOK" 2>&1 )
+    ( cd "$repo" && "$HOOK" prune-worktrees 2>&1 )
 }
 
 # -----------------------------------------------------------------------------

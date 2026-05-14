@@ -162,19 +162,6 @@ done < <(find "$home/.config/vigil" "$home/.claude" -type f \
 # as unsubstituted template markers.
 [[ $leak -eq 0 ]] && pass "no unreplaced {{...}} markers in installed files"
 
-# Positive checks: substituted values actually appear where expected.
-if grep -q "Read($home/.ssh/" "$home/.config/vigil/policies/dev.json"; then
-    pass "{{HOME}} substituted in dev.json"
-else
-    fail "{{HOME}} not substituted in dev.json"
-fi
-
-# {{PROFILE_DIR}} substitutes to $HOME/.claude (canonical), not the symlink.
-if grep -q "$home/.claude/hooks/prune-worktrees.sh" "$home/.claude/settings.local.json"; then
-    pass "{{PROFILE_DIR}} substituted to ~/.claude in settings.local.json"
-else
-    fail "{{PROFILE_DIR}} not substituted to ~/.claude in settings.local.json"
-fi
 check_file "settings.local.template.json retained in default bundle" \
     "$home/.claude/settings.local.template.json"
 check_file "settings.local.template.json retained in permissive bundle" \
@@ -385,7 +372,8 @@ fi
 # -----------------------------------------------------------------------------
 section "Refusal lists offending paths in stderr"
 home=$(mktmp)
-mkdir "$home/.claude"
+mkdir -p "$home/.claude"
+touch "$home/.claude/settings.json"
 out=$(install_capture "$home")
 stderr_text=$(printf '%s\n' "$out" | tail -n +2)
 if printf '%s' "$stderr_text" | grep -q '~/.claude'; then

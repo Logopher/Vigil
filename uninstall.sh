@@ -162,16 +162,25 @@ if [[ ${#to_remove[@]} -eq 0 ]]; then
     exit 0
 fi
 
+# When the dispatcher requires sudo but sudo is missing, degrade gracefully:
+# show the full removal plan first, then either skip the dispatcher in -y
+# mode with a warning or ask for explicit confirmation in interactive mode.
+# The previous behavior — exit 1 before printing the preview — left the user
+# without information about what else would have been removed.
+sudo_missing=0
 if [[ $hook_needs_sudo -eq 1 ]] && ! command -v sudo >/dev/null 2>&1; then
-    printf 'uninstall.sh: sudo not found; cannot remove %s\n' "$hook_path" >&2
-    exit 1
+    sudo_missing=1
 fi
 
 # -----------------------------------------------------------------------------
 echo "Will remove:"
 for p in "${to_remove[@]}"; do
     if [[ "$p" == "$hook_path" && $hook_needs_sudo -eq 1 ]]; then
-        echo "  $(display_path "$p")  (sudo)"
+        if [[ $sudo_missing -eq 1 ]]; then
+            echo "  $(display_path "$p")  (sudo unavailable — will SKIP)"
+        else
+            echo "  $(display_path "$p")  (sudo)"
+        fi
     else
         echo "  $(display_path "$p")"
     fi
@@ -182,15 +191,24 @@ echo "sessions, history, projects, etc.) will be preserved."
 echo
 
 if [[ $assume_yes -eq 0 ]]; then
-    read -r -p "Proceed? [y/N] " ans
+    if [[ $sudo_missing -eq 1 ]]; then
+        read -r -p "Proceed (dispatcher will be skipped)? [y/N] " ans
+    else
+        read -r -p "Proceed? [y/N] " ans
+    fi
     case "$ans" in
         y|Y|yes|YES) ;;
         *) echo "Aborted." >&2; exit 1 ;;
     esac
+elif [[ $sudo_missing -eq 1 ]]; then
+    printf 'uninstall.sh: WARNING — sudo not found; %s will be skipped.\n' "$hook_path" >&2
 fi
 
 for p in "${to_remove[@]}"; do
     if [[ "$p" == "$hook_path" && $hook_needs_sudo -eq 1 ]]; then
+        if [[ $sudo_missing -eq 1 ]]; then
+            continue
+        fi
         sudo rm -f -- "$p"
     else
         rm -f -- "$p"

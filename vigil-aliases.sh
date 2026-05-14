@@ -273,7 +273,7 @@ vigil_set_default() {
     local force=0 target="" current_profile="default" raw_profile=""
     local vigil_dir="$HOME/.config/vigil"
     local target_bundle="" current_bundle="" staging="" tmp_profile=""
-    local dirty=() f="" dir="" arg=""
+    local dirty=() f="" arg=""
 
     for arg in "$@"; do
         case "$arg" in

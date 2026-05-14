@@ -308,16 +308,20 @@ done
 [[ $hook_fail -eq 0 ]] && pass "hooks are executable"
 
 # -----------------------------------------------------------------------------
-section "Refusal: ~/.claude already exists"
+section "Refusal: ~/.claude/settings.json already exists"
+# install.sh deliberately tolerates a bare ~/.claude/ directory so that
+# Claude Code runtime state can coexist with reinstallation. Specific
+# Vigil-owned files inside it are the actual conflict surface.
 home=$(mktmp)
-mkdir "$home/.claude"
+mkdir -p "$home/.claude"
+touch "$home/.claude/settings.json"
 out=$(install_capture "$home")
 rc=$(printf '%s\n' "$out" | head -1)
 stderr_text=$(printf '%s\n' "$out" | tail -n +2)
 if [[ "$rc" != "0" ]] && printf '%s' "$stderr_text" | grep -qi "refuse"; then
-    pass "installer refuses when ~/.claude exists"
+    pass "installer refuses when ~/.claude/settings.json exists"
 else
-    fail "expected refusal on pre-existing ~/.claude (rc=$rc)"
+    fail "expected refusal on pre-existing ~/.claude/settings.json (rc=$rc)"
     printf '%s\n' "$stderr_text" >&2
 fi
 

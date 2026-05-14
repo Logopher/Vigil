@@ -94,6 +94,19 @@ The **default profile** is safe by construction: plan mode, the hard deny list, 
 
 An optional per-repo pre-push review, installed by running `vigil-install-review` inside the target repo. Each outgoing commit is rendered with a paranoid sanitizer (stripping ANSI, C1, and BIDI escapes) and the operator confirms y/N before the push proceeds. See [`THREAT_MODEL.md`](THREAT_MODEL.md#commit-review-gate-opt-in) for scope, silent-skip failure modes, and the cases where server-side branch protection is the correct layer instead.
 
+## Session analytics (v1.5)
+
+Each Vigil session writes a sidecar under `~/vigil-logs/` recording who ran, against which repo and branch, under which policy, and where to find the ccusage JSONL with the token totals. `vigil-sessions.py` materializes those sidecars into a queryable SQLite store; `vigil-report.py` renders a single-page HTML report from the store.
+
+```
+python3 ~/.config/vigil/scripts/vigil-sessions.py --db ~/vigil-logs/sessions.db
+python3 ~/.config/vigil/scripts/vigil-report.py  --db ~/vigil-logs/sessions.db
+```
+
+The report opens in any browser — no server, no external resources, sortable columns. Re-running the ingest is incremental: sidecars whose mtime hasn't advanced are skipped, so it's safe to wire into a cron or call by hand whenever the report needs refreshing.
+
+**v1.5 acceptance test.** Point at a real `~/vigil-logs/` containing at least one sidecar whose `ccusage_jsonl` field resolves to an existing file. Delete any prior `~/vigil-logs/sessions.db` to force a fresh migration. Run the two commands above; open `~/vigil-reports/$(date +%F).html`. Rows should render with non-NULL token totals and the default sort is `total_tokens DESC NULLS LAST, started_at DESC`. Re-running the ingest with no new sessions should report `mtime-unchanged: N` for every prior sidecar and zero new upserts. Sidecar fields and stability promises are documented in [`ANALYTICS.md`](ANALYTICS.md#stable-contract).
+
 ## Updating
 
 Repo edits do not change session behavior until the installer runs. To refresh:

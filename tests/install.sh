@@ -29,10 +29,22 @@ mktmp() {
 }
 
 # Run install.sh with the given $HOME. Suppresses stdout; stderr surfaces.
+# VIGIL_HOOK_INSTALL_DIR + VIGIL_UNSAFE_SKIP_SUDO=1 redirect the dispatcher-
+# install step into the ephemeral home so the test does not need sudo or
+# write to /usr/local/bin. See install.sh comment block above the hook-
+# install for the threat-model implication — these env vars are for tests
+# and dev installs only and must not be exported in normal contexts.
+#
+# Override path is $home/dev-bin (not $home/.local/bin/) because
+# ~/.local/bin/ is in MASTER_DENY_WRITE: creating it would cause the
+# "missing ~/.local/bin should have been filtered" test below to fail.
 install_into() {
     local home="$1"
     shift
-    HOME="$home" bash "$REPO_DIR/install.sh" "$@" >/dev/null
+    HOME="$home" \
+        VIGIL_HOOK_INSTALL_DIR="$home/dev-bin" \
+        VIGIL_UNSAFE_SKIP_SUDO=1 \
+        bash "$REPO_DIR/install.sh" "$@" >/dev/null
 }
 
 # Same but captures stderr and exit code.
@@ -42,7 +54,10 @@ install_capture() {
     stderr_file=$(mktemp)
     TMPDIRS+=("$stderr_file")
     local rc=0
-    HOME="$home" bash "$REPO_DIR/install.sh" >/dev/null 2>"$stderr_file" || rc=$?
+    HOME="$home" \
+        VIGIL_HOOK_INSTALL_DIR="$home/dev-bin" \
+        VIGIL_UNSAFE_SKIP_SUDO=1 \
+        bash "$REPO_DIR/install.sh" >/dev/null 2>"$stderr_file" || rc=$?
     printf '%d\n' "$rc"
     cat "$stderr_file"
 }

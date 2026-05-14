@@ -45,6 +45,10 @@ Checked paths inside $(display_path "$DEST_DIR")/:
 
 The /usr/local/bin/vigil-hook destination is reinstalled in place via
 \`sudo install\`; existing copies are overwritten without prompting.
+Set VIGIL_HOOK_INSTALL_DIR=<dir> together with VIGIL_UNSAFE_SKIP_SUDO=1
+to redirect this step to a writable directory and skip sudo (intended
+for tests and dev installs only — this bypasses tamper-resistance for
+the dispatcher binary).
 
 There is no --force. If re-installing, remove user-owned conflicts manually first.
 Claude Code runtime state in $(display_path "$CLAUDE_DIR")/ (projects/, sessions/,
@@ -124,13 +128,41 @@ cp "$REPO_DIR/pyszz.yml" "$DEST_DIR/pyszz.yml"
 # outside ~/ raises the bar for an attacker who has compromised the user's
 # profile but lacks root — they can't replace the dispatcher to neutralize
 # validate-memory-write or validate-settings-write.
-if ! command -v sudo >/dev/null 2>&1; then
-    printf 'install.sh: sudo not found; cannot install /usr/local/bin/vigil-hook\n' >&2
-    exit 1
+#
+# The override path is gated by two env vars together — VIGIL_HOOK_INSTALL_DIR
+# names a destination and VIGIL_UNSAFE_SKIP_SUDO=1 confirms the operator
+# intends to bypass root-ownership tamper-resistance. A bare path env var
+# inherited from another context (CI, a leaked export) fails closed without
+# the confirmation flag, so accidental degradation of a real install
+# requires two unrelated mistakes rather than one.
+HOOK_INSTALL_DIR="/usr/local/bin"
+hook_override=0
+if [[ -n "${VIGIL_HOOK_INSTALL_DIR-}" ]]; then
+    if [[ "${VIGIL_UNSAFE_SKIP_SUDO-}" != "1" ]]; then
+        printf 'install.sh: VIGIL_HOOK_INSTALL_DIR is set but VIGIL_UNSAFE_SKIP_SUDO!=1.\n' >&2
+        printf '  The override path is honored only with VIGIL_UNSAFE_SKIP_SUDO=1 to confirm\n' >&2
+        printf '  intent to bypass root-ownership tamper-resistance for the dispatcher.\n' >&2
+        exit 1
+    fi
+    HOOK_INSTALL_DIR="$VIGIL_HOOK_INSTALL_DIR"
+    hook_override=1
 fi
-echo "Installing vigil-hook to /usr/local/bin/ (sudo prompt may follow)..."
-sudo install -m 0755 -o root -g root \
-    "$REPO_DIR/scripts/vigil-hook" /usr/local/bin/vigil-hook
+
+if [[ $hook_override -eq 1 ]]; then
+    printf 'install.sh: WARNING — installing vigil-hook to %s/ without sudo;\n' "$HOOK_INSTALL_DIR" >&2
+    printf '  this bypasses root-ownership tamper-resistance for the dispatcher.\n' >&2
+    mkdir -p "$HOOK_INSTALL_DIR"
+    install -m 0755 \
+        "$REPO_DIR/scripts/vigil-hook" "$HOOK_INSTALL_DIR/vigil-hook"
+else
+    if ! command -v sudo >/dev/null 2>&1; then
+        printf 'install.sh: sudo not found; cannot install %s/vigil-hook\n' "$HOOK_INSTALL_DIR" >&2
+        exit 1
+    fi
+    printf 'Installing vigil-hook to %s/ (sudo prompt may follow)...\n' "$HOOK_INSTALL_DIR"
+    sudo install -m 0755 -o root -g root \
+        "$REPO_DIR/scripts/vigil-hook" "$HOOK_INSTALL_DIR/vigil-hook"
+fi
 
 # Management scripts the user can invoke later (e.g., after installing
 # a tool that creates new credential paths they want denied). The

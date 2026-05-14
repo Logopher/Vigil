@@ -33,10 +33,16 @@ mktmp() {
 }
 
 install_into() {
-    HOME="$1" bash "$REPO_DIR/install.sh" >/dev/null
+    HOME="$1" \
+        VIGIL_HOOK_INSTALL_DIR="$1/dev-bin" \
+        VIGIL_UNSAFE_SKIP_SUDO=1 \
+        bash "$REPO_DIR/install.sh" >/dev/null
 }
 update_into() {
-    HOME="$1" bash "$REPO_DIR/update.sh" -y >/dev/null
+    HOME="$1" \
+        VIGIL_HOOK_INSTALL_DIR="$1/dev-bin" \
+        VIGIL_UNSAFE_SKIP_SUDO=1 \
+        bash "$REPO_DIR/update.sh" -y >/dev/null
 }
 
 check_present() {

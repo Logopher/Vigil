@@ -6,9 +6,12 @@
 # install.sh refuses to run if its destinations exist, so we clear
 # them first by deferring to uninstall.sh (which removes only what
 # this repo placed) and then moving whatever survives into a tempdir
-# backup. After install.sh runs into clean dirs, `cp -rn` restores
-# the backup — the -n flag means freshly installed files always win,
-# so the backup only fills gaps (user additions, runtime state).
+# backup. After install.sh runs into clean dirs, `cp -r` with a
+# no-overwrite flag restores the backup — freshly installed files
+# always win, so the backup only fills gaps (user additions, runtime
+# state). The exact flag is platform-branched: GNU coreutils ≥ 9.2
+# deprecates `-n` and prefers `--update=none`; BSD `cp` supports
+# only `-n`. See `COMPATIBILITY.md` → *Known portability concerns*.
 #
 # On clean exit the backup is removed. On failure after the backup
 # has been populated, we auto-rollback: wipe whatever install.sh left
@@ -136,14 +139,23 @@ move_contents "$DEST_DIR"   "$backup_dir/config"
 
 "$REPO_DIR/install.sh"
 
-# cp -rn: backups fill gaps but never overwrite freshly installed
+# Restore: backups fill gaps but never overwrite freshly installed
 # files. Bundled files always come from the new install (uninstall
 # removed the old ones; backup never had them). User additions and
 # runtime state come from the backup. Errors here are real (disk
 # full, permissions) — let them propagate so the trap preserves the
 # backup for manual recovery.
-cp -rn "$backup_dir/claude/." "$CLAUDE_DIR/"
-cp -rn "$backup_dir/config/." "$DEST_DIR/"
+#
+# Flag selection: GNU coreutils ≥ 9.2 emits a deprecation warning for
+# `cp -n` and prefers `--update=none`; BSD `cp` (macOS, *BSD) supports
+# only `-n`. Both flags have identical "skip if dest exists, exit 0"
+# semantics, so `set -euo pipefail` behaviour is unaffected.
+case "$(uname)" in
+    Darwin|*BSD) CP_NO_OVERWRITE=(-n) ;;
+    *)           CP_NO_OVERWRITE=(--update=none) ;;
+esac
+cp -r "${CP_NO_OVERWRITE[@]}" "$backup_dir/claude/." "$CLAUDE_DIR/"
+cp -r "${CP_NO_OVERWRITE[@]}" "$backup_dir/config/." "$DEST_DIR/"
 
 keep_backup=0
 echo "Updated."

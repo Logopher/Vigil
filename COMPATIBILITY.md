@@ -45,11 +45,13 @@ The opt-in pre-push gate installed by `vigil-install-review` is verified on Linu
 All platform branches in the codebase:
 
 - `vigil-aliases.sh` — `case "$(uname)" in Darwin|*BSD) … *) …` selects between BSD and util-linux `script(1)` invocation syntax.
+- `update.sh` — `case "$(uname)" in Darwin|*BSD) … *) …` selects between `cp -n` (BSD) and `cp --update=none` (GNU coreutils ≥ 9.2) for the restore step.
 - `profiles/default/hooks/prune-worktrees.sh` — worktree matching is by basename rather than full path to survive Windows/MSYS2 path-format mismatches.
 
 ## Known portability concerns
 
 - **`script(1)` flag differences.** BSD `script` and util-linux `script` take incompatible arguments. Addressed via `uname` branching.
+- **`cp` no-overwrite flag.** GNU coreutils ≥ 9.2 emits a deprecation warning for `cp -n` in favor of `--update=none`; BSD `cp` (macOS, *BSD) does not recognize `--update=none` and only supports `-n`. Both flags have identical "skip if destination exists, exit 0" semantics. Addressed via `uname` branching in `update.sh`'s restore step.
 - **`bash` version.** macOS ships bash 3.2. All bash-specific features used on the BSD/macOS branch (parameter expansion with `${var/#.../...}`, `[[ ]]`, `shopt -s nullglob`, `case` with `|` alternatives) are supported in 3.2. The Linux/util-linux branch additionally uses `printf '%q'` for argument quoting in `vigil-aliases.sh`; this is bash 4+, but it is unreachable on macOS because it sits inside the `*)` arm of the `uname`-based branch that only executes on Linux.
 - **`find -mindepth` / `-maxdepth` / `-empty`.** GNU extensions adopted by BSD `find` on macOS 10.9+, FreeBSD 8+. Untested on older systems.
 - **Symlink creation.** `install.sh` uses `ln -s`. Linux and macOS: reliable. WSL2: reliable within the WSL filesystem. MSYS2/Git Bash on Windows: unreliable depending on user permissions and Windows version.

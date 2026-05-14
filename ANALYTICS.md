@@ -91,6 +91,23 @@ The `.json` sidecar is written after each session and contains:
 }
 ```
 
+#### Stable contract
+
+The sidecar schema is a load-bearing external contract. Field names, types, and
+semantics above are stable; consumers (including the `vigil_sessions` SQLite
+materialization shipped in v1.5 and downstream reporting) rely on them.
+
+- **Additive changes are allowed.** New fields may be added; consumers must
+  tolerate unknown keys.
+- **Renames and type changes are breaking** and require a version bump (no
+  `schema_version` field exists today; the next breaking change is the trigger
+  to introduce one).
+- **Null and empty fields are part of the contract.** `commits_during_session`
+  is `null` for non-git sessions; `harness_session_id` may be `null` for
+  zero-tool-call sessions; `ccusage_jsonl` is an empty string when no JSONL
+  could be resolved, or may point at a path that no longer exists. Consumers
+  must handle each case explicitly.
+
 `git_head` and `git_branch` are captured before the session starts, reflecting the repo
 state Claude operated against. `started_at` is local time with no timezone offset,
 derived from the same `VIGIL_SESSION_ID` string as the filename, so the two always match.

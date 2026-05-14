@@ -80,7 +80,17 @@ run_doctor() {
     local home="$1"
     local rc=0
     local out
-    out=$(cd "$REPO_DIR" && HOME="$home" bash "$DOCTOR" 2>&1) || rc=$?
+    # PATH is tight on purpose: a system-installed /usr/local/bin/vigil-hook
+    # (from earlier real installs) would otherwise mask the test's sabotaged
+    # $home/dev-bin/vigil-hook and let "Missing hook command" assertions
+    # silently pass against the wrong binary.
+    # Portability gap: macOS often locates python3 in /usr/local/bin or
+    # /opt/homebrew/bin (Homebrew). Under this tight PATH the doctor's
+    # python3 prerequisite fails on those hosts and the hook-command
+    # section short-circuits. Acceptable while macOS is "Adapted, untested"
+    # per COMPATIBILITY.md; revisit if macOS testing becomes supported.
+    out=$(cd "$REPO_DIR" && HOME="$home" PATH="$home/dev-bin:/usr/bin:/bin" \
+        bash "$DOCTOR" 2>&1) || rc=$?
     printf '%d\n%s' "$rc" "$out"
 }
 
@@ -155,24 +165,24 @@ else
 fi
 
 # -----------------------------------------------------------------------------
-section "Missing hook script -> FAIL"
+section "Missing hook command -> FAIL"
 home=$(mktmp)
 install_into "$home"
-rm "$home/.claude/hooks/prune-worktrees.sh"
+rm "$home/dev-bin/vigil-hook"
 result=$(run_doctor "$home")
 rc=$(printf '%s\n' "$result" | head -1)
 out=$(printf '%s\n' "$result" | tail -n +2)
-if [[ "$rc" == "1" ]] && grep -q "hook missing" <<< "$out"; then
-    pass "doctor exits 1 and reports missing hook"
+if [[ "$rc" == "1" ]] && grep -q "not on PATH" <<< "$out"; then
+    pass "doctor exits 1 and reports missing hook command"
 else
-    fail "expected exit 1 + 'hook missing' (rc=$rc, out: $out)"
+    fail "expected exit 1 + 'not on PATH' (rc=$rc, out: $out)"
 fi
 
 # -----------------------------------------------------------------------------
 section "Non-executable hook -> FAIL"
 home=$(mktmp)
 install_into "$home"
-chmod -x "$home/.claude/hooks/prune-worktrees.sh"
+chmod -x "$home/dev-bin/vigil-hook"
 result=$(run_doctor "$home")
 rc=$(printf '%s\n' "$result" | head -1)
 out=$(printf '%s\n' "$result" | tail -n +2)
@@ -228,7 +238,8 @@ home=$(mktmp)
 install_into "$home"
 installed_doctor="$home/.config/vigil/doctor.sh"
 rc=0
-(cd "$REPO_DIR" && HOME="$home" "$installed_doctor" >/dev/null 2>&1) || rc=$?
+(cd "$REPO_DIR" && HOME="$home" PATH="$home/dev-bin:/usr/bin:/bin" \
+    "$installed_doctor" >/dev/null 2>&1) || rc=$?
 if [[ "$rc" == "0" ]]; then
     pass "installed doctor.sh runs via its shebang and exits 0"
 else

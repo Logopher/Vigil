@@ -96,16 +96,15 @@ else
 fi
 
 # -----------------------------------------------------------------------------
-section "Hook scripts"
+section "Hook commands"
 
-LOCAL_SETTINGS="${CLAUDE_DIR}/settings.local.json"
-if [[ -f "$LOCAL_SETTINGS" && $have_python3 -eq 1 ]]; then
-    # Extract every command path under settings.hooks.<event>[].hooks[]
-    # whose type is "command". One path per line.
-    # Assumes hook commands are bare paths (matches the current
-    # settings.local.template.json convention). If a hook ever needs args or
-    # an env-var prefix, this extractor needs updating to handle that.
-    hook_paths=$(python3 - "$LOCAL_SETTINGS" <<'PY'
+if [[ -f "$SETTINGS" && $have_python3 -eq 1 ]]; then
+    # Extract the first token of every command-type hook under
+    # settings.hooks.<event>[].hooks[]. Deduplicated: the dispatcher
+    # `vigil-hook` appears across many entries; one PASS line per unique
+    # command is enough. Absolute paths and bare PATH-resolved names are
+    # both supported (the harness invokes either form).
+    hook_paths=$(python3 - "$SETTINGS" <<'PY' | sort -u
 import json, sys
 with open(sys.argv[1]) as f:
     s = json.load(f)
@@ -120,15 +119,31 @@ for event, entries in (s.get("hooks") or {}).items():
 PY
 )
     if [[ -z "$hook_paths" ]]; then
-        report WARN "no command-type hooks declared in settings.local.json"
+        report WARN "no command-type hooks declared in settings.json"
     else
-        while IFS= read -r hp; do
-            if [[ ! -e "$hp" ]]; then
-                report FAIL "hook missing: $(display_path "$hp")"
-            elif [[ ! -x "$hp" ]]; then
-                report FAIL "hook not executable: $(display_path "$hp")"
+        while IFS= read -r tok; do
+            if [[ "$tok" == /* ]]; then
+                # Absolute path: check directly.
+                if [[ ! -e "$tok" ]]; then
+                    report FAIL "hook missing: $(display_path "$tok")"
+                elif [[ ! -x "$tok" ]]; then
+                    report FAIL "hook not executable: $(display_path "$tok")"
+                else
+                    report PASS "$(display_path "$tok")"
+                fi
             else
-                report PASS "$(display_path "$hp")"
+                # Bare name: resolve via PATH. `command -v` returns empty
+                # for both "not on PATH" and "absolute path that doesn't
+                # exist", but the absolute-path branch above already
+                # handles the latter — empty here means truly not on PATH.
+                resolved=$(command -v -- "$tok" 2>/dev/null || true)
+                if [[ -z "$resolved" ]]; then
+                    report FAIL "hook command not on PATH: $tok"
+                elif [[ ! -x "$resolved" ]]; then
+                    report FAIL "hook not executable: $(display_path "$resolved")"
+                else
+                    report PASS "$tok ($(display_path "$resolved"))"
+                fi
             fi
         done <<< "$hook_paths"
     fi

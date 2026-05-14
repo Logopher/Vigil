@@ -118,6 +118,19 @@ fi
 
 mkdir -p "$DEST_DIR/policies" "$DEST_DIR/profiles" "$DEST_DIR/scripts" "$CLAUDE_DIR"
 
+# Per-session handoff dir for vigil-aliases.sh ↔ vigil-hook. Owner-only
+# permissions because the JSON files name the active policy and repo for
+# every concurrent session; the runtime wrapper recreates this on demand
+# if missing, but a fresh install pre-creates it with the right mode.
+mkdir -p "$DEST_DIR/sessions"
+chmod 700 "$DEST_DIR/sessions"
+
+# Drop the legacy shared singleton if present from a prior install. The
+# new per-session handoff replaces it; leaving the stale file behind
+# could confuse a partially-rolled-back operator, since the hook no
+# longer reads it.
+rm -f -- "$DEST_DIR/.vigil-session"
+
 cp "$REPO_DIR/vigil-aliases.sh" "$DEST_DIR/vigil-aliases.sh"
 cp "$REPO_DIR/doctor.sh" "$DEST_DIR/doctor.sh"
 chmod +x "$DEST_DIR/doctor.sh"

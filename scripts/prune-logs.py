@@ -14,6 +14,11 @@ is only applied when explicitly set.
 
 A 10-minute mtime floor protects the currently-running session from
 being pruned by its own SessionStart hook.
+
+Also sweeps ~/.config/vigil/sessions/ for files older than 7 days —
+covers leaked wrapper-<pid>.json and bridged <harness_session_id>.json
+files when SessionEnd or the wrapper EXIT trap did not run (e.g.,
+claude crashed mid-session).
 """
 import argparse
 import re
@@ -23,6 +28,18 @@ from pathlib import Path
 
 SESSION_RE = re.compile(r'^session-(\d{8}-\d{6}[^.]*)\.(log|txt|json)$')
 LIVE_FLOOR_SECONDS = 10 * 60
+
+# Session-handoff files live in ~/.config/vigil/sessions/ and are normally
+# cleaned by the wrapper's EXIT trap (wrapper-<pid>.json) or the SessionEnd
+# hook (<harness_session_id>.json). Stale files beyond this threshold are
+# leaked from a crashed wrapper or harness. The regex is anchored to the
+# two known shapes — wrapper-<pid>.json and a v4-shaped harness UUID —
+# so an operator-placed diagnostic file in that directory is left alone.
+SESSIONS_DIR_MAX_AGE_SECONDS = 7 * 86400
+SESSIONS_DIR_PATTERN = re.compile(
+    r'^(wrapper-\d+|[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-'
+    r'[0-9a-fA-F]{4}-[0-9a-fA-F]{12})\.json$'
+)
 
 
 def parse_duration(s: str) -> float:
@@ -98,6 +115,42 @@ def delete_pair(files, dry_run: bool) -> int:
     return total
 
 
+def prune_sessions_dir(sessions_dir: Path, dry_run: bool, quiet: bool) -> None:
+    """Remove stale handoff files from ~/.config/vigil/sessions/.
+
+    Only touches files matching SESSIONS_DIR_PATTERN — anything else in
+    that directory is left alone. Silent no-op when the directory does
+    not exist (fresh install before any vigil session has launched).
+    """
+    if not sessions_dir.is_dir():
+        return
+    now = time.time()
+    removed = 0
+    for entry in sessions_dir.iterdir():
+        if not entry.is_file():
+            continue
+        if not SESSIONS_DIR_PATTERN.match(entry.name):
+            continue
+        try:
+            st = entry.stat()
+        except OSError:
+            continue
+        if now - st.st_mtime < SESSIONS_DIR_MAX_AGE_SECONDS:
+            continue
+        if dry_run:
+            removed += 1
+            continue
+        try:
+            entry.unlink()
+            removed += 1
+        except OSError as e:
+            print(f"prune-logs: failed to delete {entry}: {e}", file=sys.stderr)
+    if removed and not quiet:
+        verb = "would prune" if dry_run else "pruned"
+        print(f"prune-logs: {verb} {removed} stale session handoff file(s) "
+              f"from {sessions_dir}")
+
+
 def main(argv):
     ap = argparse.ArgumentParser(description="Prune Vigil session logs.")
     ap.add_argument('--log-dir', default=str(Path.home() / 'vigil-logs'))
@@ -106,6 +159,9 @@ def main(argv):
     ap.add_argument('--dry-run', action='store_true')
     ap.add_argument('--quiet', action='store_true')
     args = ap.parse_args(argv[1:])
+
+    sessions_dir = Path.home() / '.config' / 'vigil' / 'sessions'
+    prune_sessions_dir(sessions_dir, args.dry_run, args.quiet)
 
     log_dir = Path(args.log_dir).expanduser()
     if not log_dir.is_dir():

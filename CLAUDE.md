@@ -28,13 +28,15 @@ Hooks are dispatched through a single `vigil-hook` Python binary (sudo-installed
 - `SessionStart` / `SessionEnd` → `vigil-hook prune-worktrees`
 - `SessionStart` → `vigil-hook prune-logs` (retention for `~/vigil-logs/`; defaults 180d age, 2G cap; delegates to `~/.config/vigil/scripts/prune-logs.py`)
 - `SessionStart` → `vigil-hook policy-banner` (prints active policy and session ID to stderr)
-- `PreToolUse` / `PostToolUse` → `vigil-hook log-tool-use` (appends JSONL record per call to `~/vigil-logs/tools-<session>.jsonl`)
+- `PreToolUse` / `PostToolUse` → `vigil-hook log-tool-use` (appends JSONL record per call to `~/vigil-logs/tools-<harness_session_id>.jsonl`; each record carries both `harness_session_id` and `vigil_session_id` as content fields)
+- `SessionStart` → `vigil-hook session-start` (bridges `~/.config/vigil/sessions/wrapper-<pid>.json` to `<harness_session_id>.json` and drops `~/vigil-logs/.bridge-<vigil_session_id>` for the wrapper's post-exec sidecar lookup)
+- `SessionEnd` → `vigil-hook session-end` (removes the bridged `<harness_session_id>.json`)
 - `PreToolUse` → `vigil-hook validate-memory-write` (blocks `Write`/`Edit`/`MultiEdit` targeting another project's `memory/` directory)
 - `PreToolUse` → `vigil-hook validate-settings-write` (blocks `Write`/`Edit`/`MultiEdit` targeting `~/.claude/settings.json`, `~/.claude/settings.local.json`, and `~/.claude/keybindings.json`)
 
 Hook commands in `settings.json` are bare `vigil-hook <subcommand>` invocations resolved via PATH. The installer no longer substitutes `{{PROFILE_DIR}}` for hook paths. `settings.local.template.json` is currently a stub (empty `permissions.deny` array) — host-local credential and dotfile coverage now lives entirely at the sandbox layer via `MASTER_DENY_*` in `scripts/filter-sandbox-denies.py`.
 
-All hooks read session context from `~/.config/vigil/.vigil-session` (written by `vigil-aliases.sh` at launch; the harness strips shell-exported env vars before invoking hook subprocesses). Session-level transcripts are captured via `script(1)` from the shell wrappers in `vigil-aliases.sh`.
+All hooks read session context from `~/.config/vigil/sessions/<harness_session_id>.json`. The wrapper writes a `wrapper-<pid>.json` variant at launch with a `vigil_session_id`, `log_dir`, `policy`, `launched_at`, `repo`, and `branch`; the SessionStart hook renames it to `<harness_session_id>.json` once the harness has assigned its UUID, joining the wrapper PID via `VIGIL_WRAPPER_PID` read from `/proc/<ppid>/environ` (the harness strips shell-exported env vars before invoking hook subprocesses, but not before invoking claude — see [`COMPATIBILITY.md`](COMPATIBILITY.md) for the Linux-only constraint). Session-level transcripts are captured via `script(1)` from the shell wrappers in `vigil-aliases.sh`.
 
 The sandbox `denyRead` and `denyWrite` lists are *not* defined in `settings.json`. Their authoritative source is the master tuples (`MASTER_DENY_READ`, `MASTER_DENY_WRITE`) at the top of `scripts/filter-sandbox-denies.py`. The installer invokes that script after writing `settings.json`; the script overwrites the two arrays with the master entries that currently pass bubblewrap's mount-target type check. To change the desired deny set, edit the Python source — not the JSON files. The script is safe to re-run standalone (e.g., after installing a new CLI that creates `~/.aws/`) to refresh the lists without a full reinstall.
 

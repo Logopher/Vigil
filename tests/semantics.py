@@ -107,26 +107,35 @@ def check_profile_keys(profile: dict) -> None:
 
 
 def check_baseline_consistency(profile: dict, strict: dict) -> None:
-    section("Deny baseline consistency (profile vs. strict)")
-    p = sorted(deny_of(profile))
-    s = sorted(deny_of(strict))
+    section("Bash baseline consistency (profile vs. strict)")
+    # The full deny set diverges between profile and policies: profile
+    # carries absolute-path Write/Edit/MultiEdit denies for dotfiles that
+    # would trip the path-join harness bug (KNOWN_HARNESS_BUGS.md) if
+    # placed in --settings-loaded policies. Compare only the Bash subset,
+    # which is the cross-file baseline that must agree.
+    p = sorted(d for d in deny_of(profile) if d.startswith("Bash("))
+    s = sorted(d for d in deny_of(strict) if d.startswith("Bash("))
     if p == s:
-        pass_("profile baseline deny matches strict policy deny")
+        pass_("profile Bash deny matches strict Bash deny")
     else:
-        fail("profile and strict deny lists differ")
+        fail("profile and strict Bash deny lists differ")
         diff = difflib.unified_diff(p, s, fromfile="profile", tofile="strict", lineterm="")
         for line in diff:
             print(line, file=sys.stderr)
 
 
 def check_dev_superset(profile: dict, dev: dict) -> None:
-    section("Dev deny is a superset of profile deny")
-    missing = sorted(set(deny_of(profile)) - set(deny_of(dev)))
+    section("Dev deny is a superset of profile Bash baseline")
+    # Same architectural reason as check_baseline_consistency: dev cannot
+    # carry profile's absolute-path entries. Scope the superset assertion
+    # to Bash matchers.
+    profile_bash = {d for d in deny_of(profile) if d.startswith("Bash(")}
+    missing = sorted(profile_bash - set(deny_of(dev)))
     if not missing:
-        pass_("dev contains every baseline deny")
+        pass_("dev contains every Bash baseline deny")
     else:
         for entry in missing:
-            fail(f"dev missing baseline deny: {entry}")
+            fail(f"dev missing Bash baseline deny: {entry}")
 
 
 def check_yolo_guards(yolo: dict) -> None:

@@ -31,11 +31,16 @@ Removes files placed by install.sh:
   $(display_path "$CLAUDE_DIR/settings.json")
   $(display_path "$CLAUDE_DIR/agents/")<files installed by this repo>
   $(display_path "$CLAUDE_DIR/hooks/")<files installed by this repo>
+  /usr/local/bin/vigil-hook  (requires sudo)
 
 Claude Code runtime state in $(display_path "$CLAUDE_DIR") (credentials,
 sessions, history, projects, etc.) is preserved. Files under agents/
 and hooks/ that did not come from this repo are also preserved.
 Empty parent directories are removed; non-empty ones are left alone.
+
+If install.sh ran with VIGIL_HOOK_INSTALL_DIR=<dir> and
+VIGIL_UNSAFE_SKIP_SUDO=1, pass the same env vars to uninstall to
+remove the dispatcher from <dir>/vigil-hook without sudo.
 
 Pass -y to skip the confirmation prompt.
 USAGE
@@ -48,6 +53,28 @@ USAGE
             ;;
     esac
 done
+
+# -----------------------------------------------------------------------------
+# Resolve the dispatcher install dir. Mirrors install.sh's HOOK_INSTALL_DIR
+# block: the override path is gated by VIGIL_HOOK_INSTALL_DIR +
+# VIGIL_UNSAFE_SKIP_SUDO together, so a stale VIGIL_HOOK_INSTALL_DIR
+# inherited from another context can't silently redirect uninstall to a
+# wrong directory and report "Nothing to remove" while the real
+# dispatcher remains.
+HOOK_INSTALL_DIR="/usr/local/bin"
+hook_override=0
+if [[ -n "${VIGIL_HOOK_INSTALL_DIR-}" ]]; then
+    if [[ "${VIGIL_UNSAFE_SKIP_SUDO-}" != "1" ]]; then
+        printf 'uninstall.sh: VIGIL_HOOK_INSTALL_DIR is set but VIGIL_UNSAFE_SKIP_SUDO!=1.\n' >&2
+        printf '  The override path is honored only with VIGIL_UNSAFE_SKIP_SUDO=1 to confirm\n' >&2
+        printf '  intent to bypass root-ownership tamper-resistance for the dispatcher.\n' >&2
+        exit 1
+    fi
+    # Strip a trailing slash so the path-equality compare in the removal
+    # loop and the display_path output agree on canonical form.
+    HOOK_INSTALL_DIR="${VIGIL_HOOK_INSTALL_DIR%/}"
+    hook_override=1
+fi
 
 # -----------------------------------------------------------------------------
 # Build the to-remove list by mirroring install.sh's layout.
@@ -117,15 +144,37 @@ for src in "$REPO_DIR/profiles/permissive/"*; do
     fi
 done
 
+# Dispatcher at $HOOK_INSTALL_DIR. Removed unconditionally if present
+# (no hash check) — a stale dispatcher left over from a previous Vigil
+# install is precisely what uninstall should clear, and removing a
+# foreign replacement is a defensive win rather than a regression.
+hook_path="$HOOK_INSTALL_DIR/vigil-hook"
+hook_needs_sudo=0
+if [[ -e "$hook_path" ]]; then
+    to_remove+=("$hook_path")
+    if [[ $hook_override -eq 0 ]]; then
+        hook_needs_sudo=1
+    fi
+fi
+
 if [[ ${#to_remove[@]} -eq 0 ]]; then
     echo "Nothing to remove. Vigil does not appear to be installed." >&2
     exit 0
 fi
 
+if [[ $hook_needs_sudo -eq 1 ]] && ! command -v sudo >/dev/null 2>&1; then
+    printf 'uninstall.sh: sudo not found; cannot remove %s\n' "$hook_path" >&2
+    exit 1
+fi
+
 # -----------------------------------------------------------------------------
 echo "Will remove:"
 for p in "${to_remove[@]}"; do
-    echo "  $(display_path "$p")"
+    if [[ "$p" == "$hook_path" && $hook_needs_sudo -eq 1 ]]; then
+        echo "  $(display_path "$p")  (sudo)"
+    else
+        echo "  $(display_path "$p")"
+    fi
 done
 echo
 echo "Claude Code runtime state in $(display_path "$CLAUDE_DIR") (credentials,"
@@ -141,7 +190,11 @@ if [[ $assume_yes -eq 0 ]]; then
 fi
 
 for p in "${to_remove[@]}"; do
-    rm -f -- "$p"
+    if [[ "$p" == "$hook_path" && $hook_needs_sudo -eq 1 ]]; then
+        sudo rm -f -- "$p"
+    else
+        rm -f -- "$p"
+    fi
 done
 
 # Tidy up directories created by install.sh. rmdir refuses non-empty

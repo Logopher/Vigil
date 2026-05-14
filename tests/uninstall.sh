@@ -41,7 +41,10 @@ install_into() {
 }
 
 uninstall_into() {
-    HOME="$1" bash "$REPO_DIR/uninstall.sh" -y >/dev/null
+    HOME="$1" \
+        VIGIL_HOOK_INSTALL_DIR="$1/dev-bin" \
+        VIGIL_UNSAFE_SKIP_SUDO=1 \
+        bash "$REPO_DIR/uninstall.sh" -y >/dev/null
 }
 
 check_absent() {
@@ -80,6 +83,7 @@ done < <(find "$REPO_DIR/scripts" -type f -print0)
 check_absent "profiles/default symlink" "$home/.config/vigil/profiles/default"
 check_absent "settings.json"       "$home/.claude/settings.json"
 check_absent "CLAUDE.md"           "$home/.claude/CLAUDE.md"
+check_absent "vigil-hook dispatcher" "$home/dev-bin/vigil-hook"
 
 # -----------------------------------------------------------------------------
 section "Empty install: parent directories are tidied up"
@@ -152,19 +156,27 @@ fi
 
 # -----------------------------------------------------------------------------
 section "Idempotent: second uninstall is a no-op"
-out=$(HOME="$home" bash "$REPO_DIR/uninstall.sh" -y 2>&1)
+# Closed stdin catches any accidental interactive prompt.
+out=$(HOME="$home" \
+    VIGIL_HOOK_INSTALL_DIR="$home/dev-bin" \
+    VIGIL_UNSAFE_SKIP_SUDO=1 \
+    bash "$REPO_DIR/uninstall.sh" -y </dev/null 2>&1)
 rc=$?
 if [[ $rc -eq 0 ]] && grep -qi "nothing to remove" <<<"$out"; then
     pass "second uninstall reports nothing to remove"
 else
     fail "second uninstall: rc=$rc out=$out"
 fi
+check_absent "vigil-hook dispatcher (idempotent)" "$home/dev-bin/vigil-hook"
 
 # -----------------------------------------------------------------------------
 section "Default invocation (no -y) requires confirmation"
 home=$(mktmp)
 install_into "$home"
-out=$(printf 'n\n' | HOME="$home" bash "$REPO_DIR/uninstall.sh" 2>&1)
+out=$(printf 'n\n' | HOME="$home" \
+    VIGIL_HOOK_INSTALL_DIR="$home/dev-bin" \
+    VIGIL_UNSAFE_SKIP_SUDO=1 \
+    bash "$REPO_DIR/uninstall.sh" 2>&1)
 rc=$?
 if [[ $rc -ne 0 ]] && grep -qi "abort" <<<"$out"; then
     pass "uninstall without -y respects 'n'"
@@ -179,12 +191,57 @@ fi
 
 # -----------------------------------------------------------------------------
 section "Default invocation: 'y' on stdin proceeds"
-out=$(printf 'y\n' | HOME="$home" bash "$REPO_DIR/uninstall.sh" 2>&1)
+out=$(printf 'y\n' | HOME="$home" \
+    VIGIL_HOOK_INSTALL_DIR="$home/dev-bin" \
+    VIGIL_UNSAFE_SKIP_SUDO=1 \
+    bash "$REPO_DIR/uninstall.sh" 2>&1)
 rc=$?
 if [[ $rc -eq 0 ]] && [[ ! -f "$home/.claude/settings.json" ]]; then
     pass "uninstall without -y proceeds on 'y'"
 else
     fail "expected successful uninstall on 'y' (rc=$rc, out=$out)"
 fi
+
+# -----------------------------------------------------------------------------
+section "Bare VIGIL_HOOK_INSTALL_DIR without VIGIL_UNSAFE_SKIP_SUDO errors out"
+# Parity with install.sh: a stale VIGIL_HOOK_INSTALL_DIR inherited from
+# another context must not silently redirect uninstall.
+home=$(mktmp)
+out=$(HOME="$home" VIGIL_HOOK_INSTALL_DIR="$home/dev-bin" \
+    bash "$REPO_DIR/uninstall.sh" -y 2>&1)
+rc=$?
+if [[ $rc -ne 0 ]] && grep -qi "VIGIL_HOOK_INSTALL_DIR is set" <<<"$out"; then
+    pass "bare override errors out"
+else
+    fail "expected error (rc=$rc, out=$out)"
+fi
+
+# -----------------------------------------------------------------------------
+section "Foreign dispatcher at override path is removed"
+# A dispatcher that doesn't match the repo's current build (different version,
+# leftover from a previous install, etc.) is still removed — no hash check.
+home=$(mktmp)
+install_into "$home"
+echo "this is not the real vigil-hook" > "$home/dev-bin/vigil-hook"
+uninstall_into "$home"
+check_absent "foreign dispatcher" "$home/dev-bin/vigil-hook"
+check_absent "settings.json after foreign-dispatcher uninstall" "$home/.claude/settings.json"
+
+# -----------------------------------------------------------------------------
+section "Missing dispatcher: uninstall succeeds without error"
+home=$(mktmp)
+install_into "$home"
+rm -f "$home/dev-bin/vigil-hook"
+out=$(HOME="$home" \
+    VIGIL_HOOK_INSTALL_DIR="$home/dev-bin" \
+    VIGIL_UNSAFE_SKIP_SUDO=1 \
+    bash "$REPO_DIR/uninstall.sh" -y 2>&1)
+rc=$?
+if [[ $rc -eq 0 ]]; then
+    pass "uninstall with missing dispatcher succeeds"
+else
+    fail "missing dispatcher: rc=$rc out=$out"
+fi
+check_absent "settings.json after missing-dispatcher uninstall" "$home/.claude/settings.json"
 
 exit $failed

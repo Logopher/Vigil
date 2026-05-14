@@ -31,6 +31,12 @@ mktmp() {
 # Per-invocation identity; sandbox blocks persistent git-config writes.
 GIT_ID=(-c user.email=test@example.invalid -c user.name=vigil-hook-test)
 
+# Isolate every test commit from the host's commit.gpgsign + signingkey
+# settings — ~/.ssh/ is denyRead under the sandbox so signing would fail
+# with the misleading "Couldn't load public key" error. All git invocations
+# below inherit this via export.
+export GIT_CONFIG_GLOBAL=/dev/null
+
 # Initialize a repo with the hook installed and one initial commit.
 seed_repo() {
     local repo="$1"

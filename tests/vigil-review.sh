@@ -34,6 +34,12 @@ mktmp() {
 # `feat(config): block persistent git-config and hooks writes...`).
 GIT_ID=(-c user.email=test@example.invalid -c user.name=vigil-review-test)
 
+# Isolate every test commit from the host's commit.gpgsign + signingkey
+# settings — ~/.ssh/ is denyRead under the sandbox so signing would fail
+# with the misleading "Couldn't load public key" error. All git invocations
+# below inherit this via export.
+export GIT_CONFIG_GLOBAL=/dev/null
+
 # Two-commit repo: empty initial + one with an ANSI clear-screen subject.
 # --cleanup=verbatim keeps the literal ESC bytes intact regardless of git's
 # default commit.cleanup behavior, which varies by version.

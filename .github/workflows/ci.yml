@@ -36,6 +36,7 @@ jobs:
             update.sh \
             doctor.sh \
             vigil-aliases.sh \
+            scripts/run-pyszz.sh \
             scripts/hooks/pre-push \
             scripts/hooks/prepare-commit-msg
 

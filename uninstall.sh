@@ -232,7 +232,12 @@ empty_dirs+=("$PERMISSIVE_DEST" "$DEST_DIR/profiles")
 for src in "$REPO_DIR/profiles/default/"*; do
     [[ -d "$src" ]] && empty_dirs+=("$CLAUDE_DIR/$(basename "$src")")
 done
-empty_dirs+=("$DEST_DIR" "$CLAUDE_DIR")
+# $DEST_DIR/sessions is created unconditionally by install.sh (not derived
+# from the repo tree). Listed before $DEST_DIR so rmdir processes the child
+# first; rmdir's refusal of non-empty dirs means a live session's handoff
+# files are preserved automatically, at the cost of $DEST_DIR also being
+# left behind in that case.
+empty_dirs+=("$DEST_DIR/sessions" "$DEST_DIR" "$CLAUDE_DIR")
 rmdir -- "${empty_dirs[@]}" 2>/dev/null || true
 
 echo "Done."

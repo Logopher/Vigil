@@ -87,6 +87,14 @@ check_absent "vigil-hook dispatcher" "$home/dev-bin/vigil-hook"
 
 # -----------------------------------------------------------------------------
 section "Empty install: parent directories are tidied up"
+# sessions/ checked before its parent so a regression in the empty_dirs
+# ordering surfaces here rather than as a confusing "$DEST_DIR still present"
+# message whose root cause is one level deeper.
+if [[ ! -d "$home/.config/vigil/sessions" ]]; then
+    pass "~/.config/vigil/sessions removed (was empty)"
+else
+    fail "~/.config/vigil/sessions still present after empty uninstall"
+fi
 if [[ ! -d "$home/.claude" ]]; then
     pass "~/.claude removed (was empty)"
 else

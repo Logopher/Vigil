@@ -152,9 +152,11 @@ else
 
     # Capture the latest pyszz output file by mtime. pyszz writes
     # bic_<conf-base>_<ts>[.NN].json; mtime sort handles the .NN collision tail.
-    # `ls` exits non-zero when the glob matches nothing — `|| true` keeps
-    # set -e from aborting before the empty-check below fires.
-    latest=$(ls -t "$PYSZZ_DIR/out/bic_"*.json 2>/dev/null | head -n 1 || true)
+    # find emits mtime-prefixed paths so sort -nr picks the newest; absent
+    # out/ directory or empty match yields an empty string handled below.
+    latest=$(find "$PYSZZ_DIR/out" -maxdepth 1 -type f -name 'bic_*.json' \
+        -printf '%T@ %p\n' 2>/dev/null \
+        | sort -nr | head -n 1 | cut -d' ' -f2- || true)
     if [[ -z "$latest" || ! -f "$latest" ]]; then
         printf 'run-pyszz: pyszz produced no output in %s/out/\n' "$PYSZZ_DIR" >&2
         exit 3

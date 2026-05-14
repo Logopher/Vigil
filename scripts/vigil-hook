@@ -12,6 +12,8 @@ profiles/<name>/hooks/:
     validate-memory-write   PreToolUse — block cross-project memory writes
     validate-settings-write PreToolUse — block writes to Vigil core settings
     policy-banner           SessionStart — print active policy to stderr
+    session-start           SessionStart — bridge wrapper-<pid>.json → <id>.json
+    session-end             SessionEnd — clean up bridged session file
     prune-worktrees         SessionStart / SessionEnd — clean stale worktrees
     prune-logs              SessionStart — log retention (delegates to the
                             user-installed prune-logs.py helper)
@@ -20,9 +22,11 @@ All subcommands fail open (return 0) on parse errors or missing context so
 edge cases never accidentally block tool calls. The two validators exit 2
 with a JSON decision on stdout when they intend to deny.
 
-The harness strips shell-exported env vars before invoking hooks, so this
-script never depends on $HOME being set: os.path.expanduser('~') falls
-back to getpwuid() when HOME is empty.
+The harness strips shell-exported env vars before invoking hook subprocesses,
+so this script never depends on $HOME being set: os.path.expanduser('~') falls
+back to getpwuid() when HOME is empty. To recover the wrapper's session
+state across that strip, the bridge reads /proc/<ppid>/environ — claude's
+own env, which retains VIGIL_WRAPPER_PID exported by the wrapper.
 """
 
 import json
@@ -37,38 +41,125 @@ from datetime import datetime, timezone
 _WRITE_TOOLS = frozenset({'Write', 'Edit', 'MultiEdit'})
 
 
-def _vigil_session_marker():
-    """Parse ~/.config/vigil/.vigil-session, or return None.
-
-    The marker is written by vigil-aliases.sh at session launch and read by
-    every hook that needs session context. Returns None when the file is
-    absent (direct `claude` launch outside a Vigil wrapper) or unreadable.
-    """
+def _sessions_dir():
     home = os.path.expanduser('~')
-    path = os.path.join(home, '.config', 'vigil', '.vigil-session')
-    if not os.path.isfile(path):
+    return os.path.join(home, '.config', 'vigil', 'sessions')
+
+
+def _wrapper_pid_from_environ(ppid):
+    """Extract VIGIL_WRAPPER_PID from /proc/<ppid>/environ.
+
+    The hook's parent is claude, which inherited the wrapper's env at exec
+    time. Reading claude's environ recovers the wrapper PID that the env
+    strip on hook-subprocess launch would otherwise hide.
+    """
+    if not isinstance(ppid, int) or ppid <= 0:
         return None
     try:
-        with open(path) as f:
-            return json.load(f)
-    except (OSError, json.JSONDecodeError):
+        with open(f'/proc/{ppid}/environ', 'rb') as f:
+            data = f.read()
+    except OSError:
         return None
+    for entry in data.split(b'\0'):
+        if entry.startswith(b'VIGIL_WRAPPER_PID='):
+            value = entry[len(b'VIGIL_WRAPPER_PID='):].decode('utf-8', errors='replace')
+            # isdecimal() restricts to ASCII 0-9; isdigit() also accepts
+            # non-ASCII digit characters which int() will happily parse
+            # into garbage PID values.
+            if value.isdecimal() and int(value) > 0:
+                return int(value)
+            return None
+    return None
+
+
+def _bridge_session(harness_session_id, ppid):
+    """Promote wrapper-<pid>.json to <harness_session_id>.json.
+
+    Idempotent: if the target already exists (a concurrent hook won the
+    rename), returns the existing path. Returns None when no source file
+    is reachable — the caller then falls through to legacy or fails open.
+    """
+    if not harness_session_id:
+        return None
+    sessions = _sessions_dir()
+    target = os.path.join(sessions, f'{harness_session_id}.json')
+    if os.path.isfile(target):
+        return target
+    wrapper_pid = _wrapper_pid_from_environ(ppid)
+    if wrapper_pid is None:
+        return None
+    src = os.path.join(sessions, f'wrapper-{wrapper_pid}.json')
+    if not os.path.isfile(src):
+        return None
+    try:
+        os.rename(src, target)
+    except OSError:
+        if os.path.isfile(target):
+            return target
+        return None
+    return target
+
+
+def _load_session_context(harness_session_id, ppid):
+    """Resolve the per-session context for this hook invocation.
+
+    Tries, in order: the bridged file at ~/.config/vigil/sessions/
+    <harness_session_id>.json; a fresh bridge from wrapper-<pid>.json;
+    and the legacy ~/.config/vigil/.vigil-session singleton.
+
+    Returns the parsed dict, or None when no source is available. The
+    legacy fallback is retained while the wrapper migration is in
+    flight; a follow-up commit removes it once vigil-aliases.sh stops
+    writing the singleton.
+    """
+    bridged = None
+    if harness_session_id:
+        candidate = os.path.join(_sessions_dir(), f'{harness_session_id}.json')
+        if os.path.isfile(candidate):
+            bridged = candidate
+    if bridged is None:
+        bridged = _bridge_session(harness_session_id, ppid)
+    if bridged is not None:
+        try:
+            with open(bridged) as f:
+                ctx = json.load(f)
+        except (OSError, json.JSONDecodeError):
+            ctx = None
+        if ctx is not None:
+            return ctx
+    home = os.path.expanduser('~')
+    legacy = os.path.join(home, '.config', 'vigil', '.vigil-session')
+    if os.path.isfile(legacy):
+        try:
+            with open(legacy) as f:
+                return json.load(f)
+        except (OSError, json.JSONDecodeError):
+            return None
+    return None
+
+
+def _ctx_vigil_session_id(ctx):
+    """Read the Vigil session id from either the new or legacy schema."""
+    return ctx.get('vigil_session_id') or ctx.get('session_id') or ''
 
 
 # ---------- log-tool-use ----------
 
 def cmd_log_tool_use():
-    marker = _vigil_session_marker()
-    if not marker:
-        return 0
-    log_dir = marker.get('log_dir', '')
-    session_id = marker.get('session_id', '')
-    if not log_dir or not session_id:
-        return 0
-
     try:
         event_data = json.load(sys.stdin)
-    except (ValueError, OSError):
+    except (ValueError, OSError, UnicodeDecodeError):
+        return 0
+    if not isinstance(event_data, dict):
+        return 0
+
+    harness_session_id = event_data.get('session_id', '')
+    ctx = _load_session_context(harness_session_id, os.getppid())
+    if not ctx:
+        return 0
+    log_dir = ctx.get('log_dir', '')
+    vigil_session_id = _ctx_vigil_session_id(ctx)
+    if not log_dir or not vigil_session_id:
         return 0
 
     hook_event = event_data.get('hook_event_name', '')
@@ -80,8 +171,8 @@ def cmd_log_tool_use():
     # without an mtime heuristic.
     record = {
         'ts': datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
-        'session_id': session_id,
-        'harness_session_id': event_data.get('session_id', ''),
+        'session_id': vigil_session_id,
+        'harness_session_id': harness_session_id,
         'event': hook_event,
         'tool': event_data.get('tool_name', ''),
         'tool_use_id': event_data.get('tool_use_id', ''),
@@ -97,7 +188,7 @@ def cmd_log_tool_use():
 
     try:
         os.makedirs(log_dir, exist_ok=True)
-        log_path = os.path.join(log_dir, f'tools-{session_id}.jsonl')
+        log_path = os.path.join(log_dir, f'tools-{vigil_session_id}.jsonl')
         with open(log_path, 'a') as f:
             f.write(json.dumps(record) + '\n')
     except OSError:
@@ -207,15 +298,73 @@ def cmd_validate_settings_write():
 # ---------- policy-banner ----------
 
 def cmd_policy_banner():
-    marker = _vigil_session_marker()
-    if not marker:
+    try:
+        event_data = json.load(sys.stdin)
+    except (ValueError, OSError, UnicodeDecodeError):
+        event_data = {}
+    harness_session_id = ''
+    if isinstance(event_data, dict):
+        harness_session_id = event_data.get('session_id', '') or ''
+
+    ctx = _load_session_context(harness_session_id, os.getppid())
+    if not ctx:
         return 0
-    policy = marker.get('policy', '')
-    session_id = marker.get('session_id', '')
+    policy = ctx.get('policy', '')
+    vigil_session_id = _ctx_vigil_session_id(ctx)
     if not policy:
         return 0
-    print(f'[vigil] active policy: {policy}  |  session: {session_id}',
-          file=sys.stderr)
+    banner = f'[vigil] active policy: {policy}  |  session: {vigil_session_id}'
+    if harness_session_id:
+        banner += f'  |  harness: {harness_session_id}'
+    print(banner, file=sys.stderr)
+    return 0
+
+
+# ---------- session-start ----------
+
+def cmd_session_start():
+    """Eagerly bridge wrapper-<pid>.json → <harness_session_id>.json.
+
+    The lazy bridge in _load_session_context handles late firings; this
+    handler centralises the rename so subsequent hooks just open the
+    bridged file by payload session_id.
+    """
+    try:
+        event_data = json.load(sys.stdin)
+    except (ValueError, OSError, UnicodeDecodeError):
+        return 0
+    if not isinstance(event_data, dict):
+        return 0
+    harness_session_id = event_data.get('session_id', '')
+    if not harness_session_id:
+        return 0
+    _bridge_session(harness_session_id, os.getppid())
+    return 0
+
+
+# ---------- session-end ----------
+
+def cmd_session_end():
+    """Remove ~/.config/vigil/sessions/<harness_session_id>.json.
+
+    The wrapper's EXIT trap owns any leftover wrapper-<pid>.json (if
+    SessionStart never bridged); this handler is the symmetric cleanup
+    for the file SessionStart created.
+    """
+    try:
+        event_data = json.load(sys.stdin)
+    except (ValueError, OSError, UnicodeDecodeError):
+        return 0
+    if not isinstance(event_data, dict):
+        return 0
+    harness_session_id = event_data.get('session_id', '')
+    if not harness_session_id:
+        return 0
+    target = os.path.join(_sessions_dir(), f'{harness_session_id}.json')
+    try:
+        os.remove(target)
+    except OSError:
+        pass
     return 0
 
 
@@ -363,6 +512,8 @@ _COMMANDS = {
     'validate-memory-write':   cmd_validate_memory_write,
     'validate-settings-write': cmd_validate_settings_write,
     'policy-banner':           cmd_policy_banner,
+    'session-start':           cmd_session_start,
+    'session-end':             cmd_session_end,
     'prune-worktrees':         cmd_prune_worktrees,
     'prune-logs':              cmd_prune_logs,
 }

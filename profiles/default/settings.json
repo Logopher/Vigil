@@ -68,6 +68,7 @@
       {
         "matcher": "*",
         "hooks": [
+          { "type": "command", "command": "vigil-hook session-start",   "timeout": 5  },
           { "type": "command", "command": "vigil-hook prune-worktrees", "timeout": 15 },
           { "type": "command", "command": "vigil-hook prune-logs",      "timeout": 15 },
           { "type": "command", "command": "vigil-hook policy-banner",   "timeout": 5  }
@@ -78,7 +79,8 @@
       {
         "matcher": "*",
         "hooks": [
-          { "type": "command", "command": "vigil-hook prune-worktrees", "timeout": 15 }
+          { "type": "command", "command": "vigil-hook prune-worktrees", "timeout": 15 },
+          { "type": "command", "command": "vigil-hook session-end",     "timeout": 5  }
         ]
       }
     ],

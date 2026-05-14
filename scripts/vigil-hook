@@ -106,7 +106,10 @@ def _load_session_context(harness_session_id, ppid):
     Tries the bridged file at ~/.config/vigil/sessions/
     <harness_session_id>.json, then a fresh bridge from wrapper-<pid>.json.
     Returns the parsed dict, or None when no source is available — hooks
-    that need session context fail open in that case.
+    that need session context fail open in that case. After a successful
+    load, ensures the wrapper-side bridge marker exists so the wrapper's
+    post-exec sidecar can map vigil_session_id → harness_session_id
+    without parsing the tools log.
     """
     bridged = None
     if harness_session_id:
@@ -119,9 +122,38 @@ def _load_session_context(harness_session_id, ppid):
         return None
     try:
         with open(bridged) as f:
-            return json.load(f)
+            ctx = json.load(f)
     except (OSError, json.JSONDecodeError):
         return None
+    _ensure_bridge_marker(harness_session_id, ctx)
+    return ctx
+
+
+def _ensure_bridge_marker(harness_session_id, ctx):
+    """Drop ~/vigil-logs/.bridge-<vigil_session_id> for the wrapper.
+
+    The wrapper's post-exec sidecar code reads this single-line marker
+    to learn the harness session_id (the harness assigns it after exec
+    so the wrapper has no other way to recover it without parsing the
+    tools log). Idempotent via exclusive-create: a concurrent hook
+    losing the race observes FileExistsError and does nothing. The
+    wrapper's EXIT trap removes the marker when the session ends.
+    """
+    if not harness_session_id or not isinstance(ctx, dict):
+        return
+    vigil_session_id = ctx.get('vigil_session_id') or ''
+    log_dir = ctx.get('log_dir') or ''
+    if not vigil_session_id or not log_dir:
+        return
+    marker = os.path.join(log_dir, f'.bridge-{vigil_session_id}')
+    try:
+        os.makedirs(log_dir, exist_ok=True)
+        with open(marker, 'x') as f:
+            f.write(harness_session_id + '\n')
+    except FileExistsError:
+        pass
+    except OSError:
+        pass
 
 
 def _ctx_vigil_session_id(ctx):
@@ -145,19 +177,18 @@ def cmd_log_tool_use():
         return 0
     log_dir = ctx.get('log_dir', '')
     vigil_session_id = _ctx_vigil_session_id(ctx)
-    if not log_dir or not vigil_session_id:
+    if not log_dir or not harness_session_id:
         return 0
 
     hook_event = event_data.get('hook_event_name', '')
-    # session_id is the Vigil-assigned ID (filename of this JSONL).
-    # harness_session_id is the Claude Code session UUID, which doubles as
-    # the filename of the per-session JSONL under ~/.claude/projects/<slug>/.
-    # Capturing both lets a downstream consumer construct an exact ccusage
-    # path (BACKLOG.md "Investigate direct JSONL session ID linkage")
-    # without an mtime heuristic.
+    # Records carry both IDs as content fields. harness_session_id is
+    # the canonical key (the filename is tools-<harness_session_id>.jsonl
+    # and it also names the per-session JSONL under ~/.claude/projects/<slug>/);
+    # vigil_session_id is the wall-clock-derived wrapper anchor that names
+    # the session-*.log / .txt / .json sidecar files.
     record = {
         'ts': datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
-        'session_id': vigil_session_id,
+        'vigil_session_id': vigil_session_id,
         'harness_session_id': harness_session_id,
         'event': hook_event,
         'tool': event_data.get('tool_name', ''),
@@ -174,7 +205,7 @@ def cmd_log_tool_use():
 
     try:
         os.makedirs(log_dir, exist_ok=True)
-        log_path = os.path.join(log_dir, f'tools-{vigil_session_id}.jsonl')
+        log_path = os.path.join(log_dir, f'tools-{harness_session_id}.jsonl')
         with open(log_path, 'a') as f:
             f.write(json.dumps(record) + '\n')
     except OSError:
@@ -309,11 +340,11 @@ def cmd_policy_banner():
 # ---------- session-start ----------
 
 def cmd_session_start():
-    """Eagerly bridge wrapper-<pid>.json → <harness_session_id>.json.
+    """Eagerly bridge wrapper-<pid>.json and write the bridge marker.
 
-    The lazy bridge in _load_session_context handles late firings; this
-    handler centralises the rename so subsequent hooks just open the
-    bridged file by payload session_id.
+    _load_session_context performs both the rename and the marker write;
+    invoking it here at SessionStart concentrates the work in one fire
+    so subsequent hooks just open the already-bridged file.
     """
     try:
         event_data = json.load(sys.stdin)
@@ -324,7 +355,7 @@ def cmd_session_start():
     harness_session_id = event_data.get('session_id', '')
     if not harness_session_id:
         return 0
-    _bridge_session(harness_session_id, os.getppid())
+    _load_session_context(harness_session_id, os.getppid())
     return 0
 
 

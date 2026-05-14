@@ -123,18 +123,16 @@ _vigil_run_with_logging() (
     # ends, after script(1) returns and all post-processing completes.
     # The bridged file at <harness_session_id>.json is owned by SessionEnd;
     # this trap only removes the wrapper-<pid>.json if SessionStart never
-    # promoted it (e.g., claude crashed before any hook fired).
-    # A later commit adds a ~/vigil-logs/.bridge-<vigil_session_id> marker
-    # that the SessionStart hook writes for the wrapper's post-exec
-    # sidecar lookup; its cleanup will be added to this trap when it is
-    # introduced.
+    # promoted it (e.g., claude crashed before any hook fired), and the
+    # bridge marker the SessionStart hook drops for post-exec lookup.
+    local _bridge_marker="$VIGIL_LOG_DIR/.bridge-$VIGIL_SESSION_ID"
     if _session_tmp="$(mktemp "$_sessions_dir/.wrapper-$_wrapper_pid.XXXXXX" 2>/dev/null)"; then
         if printf '{\n  "vigil_session_id": "%s",\n  "log_dir": "%s",\n  "policy": "%s",\n  "launched_at": "%s",\n  "repo": "%s",\n  "branch": "%s"\n}\n' \
                 "$VIGIL_SESSION_ID" "$VIGIL_LOG_DIR" "$_safe_policy" "$_launched_at" \
                 "$_safe_repo" "$_safe_branch" \
                 > "$_session_tmp" \
             && mv -- "$_session_tmp" "$_session_file"; then
-            trap 'rm -f -- "$_session_file"' EXIT
+            trap 'rm -f -- "$_session_file" "$_bridge_marker"' EXIT
         else
             rm -f -- "$_session_tmp"
         fi
@@ -182,9 +180,10 @@ _vigil_run_with_logging() (
     # (local time, no timezone suffix) so it matches the filename even if the
     # session ran past midnight. ended_at is captured immediately after script(1)
     # exits, so it reflects wall-clock session end in the same local-time format.
-    # ccusage_jsonl is resolved via the harness session ID embedded in the
-    # tools log by vigil-hook log-tool-use; falls back to a most-recent-mtime
-    # scan when the tools log is absent (sessions that made zero tool calls).
+    # ccusage_jsonl is resolved via the harness session ID written to the
+    # ~/vigil-logs/.bridge-<vigil_session_id> marker by vigil-hook at
+    # SessionStart; falls back to a most-recent-mtime scan when the marker
+    # is absent (e.g., SessionStart didn't fire or claude crashed before it).
     if command -v python3 >/dev/null 2>&1; then
         local _sid="$VIGIL_SESSION_ID"
         local _started_at="${_sid:0:4}-${_sid:4:2}-${_sid:6:2}T${_sid:9:2}:${_sid:11:2}:${_sid:13:2}"
@@ -196,20 +195,19 @@ import json, re, sys, os, glob as _g
 _UUID_RE = re.compile(r'^[0-9a-fA-F-]+\$')
 ccusage_jsonl = ''
 harness_sid = ''
-tools_path = os.path.join(sys.argv[9], f'tools-{sys.argv[10]}.jsonl')
+bridge_marker = os.path.join(sys.argv[9], f'.bridge-{sys.argv[10]}')
 try:
-    with open(tools_path) as f:
-        first = json.loads(f.readline())
-    candidate = first.get('harness_session_id', '') or ''
-    # Guard against path-traversal in case the field is ever corrupted; the
-    # value is written by vigil-hook (trusted) but a regex check costs nothing.
+    with open(bridge_marker) as f:
+        candidate = f.read().strip()
+    # Guard against unexpected content in case the marker is ever corrupted;
+    # the value is written by vigil-hook (trusted) but a regex check is cheap.
     if _UUID_RE.match(candidate):
         harness_sid = candidate
         matches = _g.glob(os.path.expanduser(
             f'~/.claude/projects/*/{harness_sid}.jsonl'))
         if matches:
             ccusage_jsonl = matches[0]
-except (OSError, ValueError):
+except OSError:
     pass
 if not ccusage_jsonl:
     files = _g.glob(os.path.expanduser('~/.claude/projects/**/*.jsonl'),

@@ -74,22 +74,29 @@ install_into() {
         "$home/.claude/settings.json" >/dev/null)
 }
 
+# Build a PATH with the production vigil-hook install location filtered
+# out, so a real /usr/local/bin/vigil-hook (left over from sudo-cached
+# install runs) cannot mask the test's $home/dev-bin/vigil-hook fixture.
+# Tracks install.sh's HOOK_INSTALL_DIR default — update both if it ever
+# changes. Preserves the rest of $PATH so Homebrew-provided python3 on
+# macOS remains visible.
+PROD_HOOK_INSTALL_DIR="/usr/local/bin"
+path_without_prod_hook_dir() {
+    local padded=":$PATH:"
+    padded="${padded//:$PROD_HOOK_INSTALL_DIR:/:}"
+    padded="${padded#:}"
+    padded="${padded%:}"
+    printf '%s' "$padded"
+}
+
 # Run doctor with $HOME set; capture combined stdout+stderr and exit code.
 # Echoes "<rc>\n<output>" so callers can split with `head -1` / `tail -n +2`.
 run_doctor() {
     local home="$1"
     local rc=0
     local out
-    # PATH is tight on purpose: a system-installed /usr/local/bin/vigil-hook
-    # (from earlier real installs) would otherwise mask the test's sabotaged
-    # $home/dev-bin/vigil-hook and let "Missing hook command" assertions
-    # silently pass against the wrong binary.
-    # Portability gap: macOS often locates python3 in /usr/local/bin or
-    # /opt/homebrew/bin (Homebrew). Under this tight PATH the doctor's
-    # python3 prerequisite fails on those hosts and the hook-command
-    # section short-circuits. Acceptable while macOS is "Adapted, untested"
-    # per COMPATIBILITY.md; revisit if macOS testing becomes supported.
-    out=$(cd "$REPO_DIR" && HOME="$home" PATH="$home/dev-bin:/usr/bin:/bin" \
+    out=$(cd "$REPO_DIR" && HOME="$home" \
+        PATH="$home/dev-bin:$(path_without_prod_hook_dir)" \
         bash "$DOCTOR" 2>&1) || rc=$?
     printf '%d\n%s' "$rc" "$out"
 }
@@ -238,7 +245,8 @@ home=$(mktmp)
 install_into "$home"
 installed_doctor="$home/.config/vigil/doctor.sh"
 rc=0
-(cd "$REPO_DIR" && HOME="$home" PATH="$home/dev-bin:/usr/bin:/bin" \
+(cd "$REPO_DIR" && HOME="$home" \
+    PATH="$home/dev-bin:$(path_without_prod_hook_dir)" \
     "$installed_doctor" >/dev/null 2>&1) || rc=$?
 if [[ "$rc" == "0" ]]; then
     pass "installed doctor.sh runs via its shebang and exits 0"

@@ -69,6 +69,7 @@ uninstall_into "$home"
 
 check_absent "vigil-aliases.sh"   "$home/.config/vigil/vigil-aliases.sh"
 check_absent "doctor.sh"           "$home/.config/vigil/doctor.sh"
+check_absent "pyszz.yml"           "$home/.config/vigil/pyszz.yml"
 check_absent "policies/dev.json"   "$home/.config/vigil/policies/dev.json"
 check_absent "policies/strict.json" "$home/.config/vigil/policies/strict.json"
 check_absent "policies/yolo.json"  "$home/.config/vigil/policies/yolo.json"

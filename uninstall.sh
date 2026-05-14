@@ -23,6 +23,7 @@ Usage: ./uninstall.sh [-y]
 Removes files placed by install.sh:
   $(display_path "$DEST_DIR/vigil-aliases.sh")
   $(display_path "$DEST_DIR/doctor.sh")
+  $(display_path "$DEST_DIR/pyszz.yml")
   $(display_path "$DEST_DIR/policies/")*.json
   $(display_path "$DEST_DIR/scripts/")*
   $(display_path "$DEST_DIR/profiles/default") (symlink)
@@ -61,6 +62,7 @@ add_if_exists() {
 
 add_if_exists "$DEST_DIR/vigil-aliases.sh"
 add_if_exists "$DEST_DIR/doctor.sh"
+add_if_exists "$DEST_DIR/pyszz.yml"
 add_if_exists "$DEST_DIR/active-profile"
 
 for src in "$REPO_DIR/policies/"*; do

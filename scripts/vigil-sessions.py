@@ -8,7 +8,7 @@ Usage:
     vigil-sessions.py [--log-dir DIR] [--max-age-days N]
                       [--format json|csv] [--output FILE]
                       [--pricing FILE] [--live-pricing]
-                      [--runs-log FILE]
+                      [--runs-log FILE] [--db PATH]
                       [--include-incomplete] [--include-no-cost]
 
 Output (one record per session that passes filtering):
@@ -26,6 +26,14 @@ Enrichment (tier 2 — file I/O):
     For each candidate, the ccusage JSONL is read. Sessions whose JSONL is
     unreadable or contains no assistant entries are skipped unless --include-no-cost.
 
+Materialization (--db):
+    When --db PATH is given, each ingested session is also upserted into a
+    vigil_sessions SQLite table at PATH (created if missing). Sidecars whose
+    mtime hasn't advanced past the stored value are skipped entirely — the
+    JSON/CSV output for --db runs reflects only new or changed sessions, not
+    a full re-scan. Sessions with null harness_session_id (zero-tool sessions)
+    are processed for JSON/CSV but not upserted (no PK to key on).
+
 Run log:
     Each invocation appends one JSON line to --runs-log recording counts and
     status. The log file is created on first use.
@@ -36,10 +44,15 @@ import csv
 import datetime
 import io
 import json
+import os
+import sqlite3
 import sys
 import urllib.request
 from pathlib import Path
 from typing import Dict, List, Optional
+
+# Same directory as this script; safe whether invoked by absolute or relative path.
+import vigil_sessions_db
 
 # LiteLLM is the canonical upstream pricing dataset; same URL used by ccusage.
 # Keys appear as both "anthropic/claude-<name>" and bare "claude-<name>".
@@ -250,6 +263,61 @@ _OUTPUT_FIELDS = [
 ]
 
 
+def _build_db_row(
+    sidecar: dict,
+    sidecar_path: Path,
+    sidecar_mtime_ns: int,
+    started_utc: datetime.datetime,
+    ended_utc: Optional[datetime.datetime],
+    enrichment: Optional[dict],
+    ingested_at_ms: int,
+) -> dict:
+    """Translate one sidecar + enrichment into a vigil_sessions DB row.
+
+    Caller has already verified harness_session_id is set; nothing here
+    re-checks. Returns a dict matching vigil_sessions_db.COLUMNS exactly so
+    a missing key would be a programmer error.
+    """
+    cwd = sidecar.get("cwd") or None
+    started_ms = int(started_utc.timestamp() * 1000)
+    ended_ms: Optional[int] = None
+    duration_ms: Optional[int] = None
+    if ended_utc is not None:
+        ended_ms = int(ended_utc.timestamp() * 1000)
+        duration_ms = int((ended_utc - started_utc).total_seconds() * 1000)
+    commits = sidecar.get("commits_during_session")
+    return {
+        "harness_session_id": sidecar["harness_session_id"],
+        "sidecar_path": str(sidecar_path),
+        "sidecar_mtime_ns": sidecar_mtime_ns,
+        "cwd": cwd,
+        "repo_name": Path(cwd).name if cwd else None,
+        "git_branch": sidecar.get("git_branch") or None,
+        "git_head": sidecar.get("git_head") or None,
+        "ended_at_git_head": sidecar.get("ended_at_git_head") or None,
+        "active_policy": sidecar.get("active_policy") or None,
+        "started_at_utc": started_utc.isoformat(),
+        "ended_at_utc": ended_utc.isoformat() if ended_utc else None,
+        "started_at_ms": started_ms,
+        "ended_at_ms": ended_ms,
+        "duration_ms": duration_ms,
+        "commits_during_session_json":
+            json.dumps(commits) if commits is not None else None,
+        # Sidecar contract: ccusage_jsonl is always present as a string but
+        # may be empty when no JSONL could be resolved. Normalize empty to NULL.
+        "ccusage_jsonl_path": sidecar.get("ccusage_jsonl") or None,
+        "slug": (enrichment or {}).get("slug"),
+        "models_used": (enrichment or {}).get("models_used"),
+        "input_tokens": (enrichment or {}).get("input_tokens"),
+        "cache_creation_tokens": (enrichment or {}).get("cache_creation_tokens"),
+        "cache_read_tokens": (enrichment or {}).get("cache_read_tokens"),
+        "output_tokens": (enrichment or {}).get("output_tokens"),
+        "cost_usd": (enrichment or {}).get("cost_usd"),
+        "cost_usd_by_model": (enrichment or {}).get("cost_usd_by_model"),
+        "ingested_at_ms": ingested_at_ms,
+    }
+
+
 def _append_run_log(
     runs_log: Path,
     run_ts: datetime.datetime,
@@ -297,6 +365,9 @@ def main(argv: List[str]) -> int:
     ap.add_argument("--runs-log",
                     default=str(Path.home() / "vigil-logs" / "vigil-sessions-runs.jsonl"),
                     help="append-only run audit log (default: ~/vigil-logs/vigil-sessions-runs.jsonl)")
+    ap.add_argument("--db",
+                    help="materialize sessions into a vigil_sessions SQLite store at this path; "
+                         "sidecars whose mtime hasn't advanced are skipped entirely")
     ap.add_argument("--include-incomplete", action="store_true",
                     help="include sessions with no ended_at (still running or killed)")
     ap.add_argument("--include-no-cost", action="store_true",
@@ -327,12 +398,60 @@ def main(argv: List[str]) -> int:
     sidecar_paths = sorted(log_dir.glob("session-*.json"))
     sidecars_scanned = len(sidecar_paths)
 
+    db_conn: Optional[sqlite3.Connection] = None
+    if args.db:
+        db_path = Path(args.db).expanduser()
+        db_path.parent.mkdir(parents=True, exist_ok=True)
+        db_conn = sqlite3.connect(str(db_path))
+        vigil_sessions_db.migrate(db_conn)
+
+    try:
+        return _run(args, run_ts, max_age, pricing, sidecar_paths,
+                   sidecars_scanned, db_conn)
+    finally:
+        if db_conn is not None:
+            db_conn.close()
+
+
+def _run(
+    args: argparse.Namespace,
+    run_ts: datetime.datetime,
+    max_age: Optional[int],
+    pricing: Dict[str, Dict[str, float]],
+    sidecar_paths: List[Path],
+    sidecars_scanned: int,
+    db_conn: Optional[sqlite3.Connection],
+) -> int:
+    """Process sidecars and produce output. Split from main() so the connection
+    cleanup in main()'s finally runs whether this body returns or raises."""
+    run_ts_ms = int(run_ts.timestamp() * 1000)
+
     results = []
     sessions_normalized = 0
     tier1_discard: Dict[str, int] = {}
     tier2_discard = 0
+    db_upserts = 0
+    mtime_skipped = 0
 
     for path in sidecar_paths:
+        # When materializing to a DB, skip sidecars whose mtime hasn't
+        # advanced past the previously-stored value — they're already
+        # captured. JSON/CSV output for --db runs therefore reflects only
+        # new or changed sessions, which is what an incremental ingest
+        # caller wants. Without --db, every sidecar is reprocessed (existing
+        # full-scan behavior).
+        try:
+            sidecar_mtime_ns = os.stat(path).st_mtime_ns
+        except OSError as exc:
+            print(f"warning: cannot stat {path.name}: {exc}", file=sys.stderr)
+            continue
+
+        if db_conn is not None:
+            stored_mtime = vigil_sessions_db.get_sidecar_mtime_ns(db_conn, str(path))
+            if stored_mtime is not None and sidecar_mtime_ns <= stored_mtime:
+                mtime_skipped += 1
+                continue
+
         try:
             sidecar = json.loads(path.read_text(encoding="utf-8"))
         except (json.JSONDecodeError, OSError) as exc:
@@ -394,6 +513,16 @@ def main(argv: List[str]) -> int:
             record.update(enrichment)
         results.append(record)
 
+        # Materialize to SQLite. Skip sessions with a null harness_session_id
+        # (zero-tool-call sessions) — the table's PK can't represent them.
+        if db_conn is not None and sidecar.get("harness_session_id"):
+            db_row = _build_db_row(
+                sidecar, path, sidecar_mtime_ns,
+                started_utc, ended_utc, enrichment, run_ts_ms,
+            )
+            vigil_sessions_db.upsert_session(db_conn, db_row)
+            db_upserts += 1
+
     tier1_passed = sessions_normalized - sum(tier1_discard.values())
     tier2_passed = len(results)
 
@@ -420,19 +549,23 @@ def main(argv: List[str]) -> int:
         error_msg = repr(exc)
         print(f"error: output failed: {exc}", file=sys.stderr)
 
-    # Summary to stderr
-    print(
-        f"vigil-sessions: {sidecars_scanned} scanned, "
-        f"{sessions_normalized} normalized, "
-        f"{tier1_passed} passed tier1, "
-        f"{tier2_passed} enriched",
-        file=sys.stderr,
-    )
+    # Summary to stderr. The accounting reads left-to-right as a pipeline:
+    # scanned → minus mtime-unchanged (skipped pre-parse, --db only) → normalized
+    # (parsed) → tier1_passed (algorithmic filter) → enriched (JSONL read).
+    summary_parts = [f"{sidecars_scanned} scanned"]
+    if mtime_skipped:
+        summary_parts.append(f"{mtime_skipped} mtime-unchanged")
+    summary_parts.append(f"{sessions_normalized} normalized")
+    summary_parts.append(f"{tier1_passed} passed tier1")
+    summary_parts.append(f"{tier2_passed} enriched")
+    print("vigil-sessions: " + ", ".join(summary_parts), file=sys.stderr)
     if tier1_discard:
         reasons = ", ".join(f"{k}={v}" for k, v in sorted(tier1_discard.items()))
         print(f"  tier1 discards: {reasons}", file=sys.stderr)
     if tier2_discard:
         print(f"  tier2 discards: {tier2_discard}", file=sys.stderr)
+    if db_conn is not None:
+        print(f"  db upserts: {db_upserts}", file=sys.stderr)
 
     _append_run_log(
         runs_log=Path(args.runs_log).expanduser(),

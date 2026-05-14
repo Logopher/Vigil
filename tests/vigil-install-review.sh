@@ -72,6 +72,7 @@ seed_repo() {
     local repo="$1"
     git init -q "$repo"
     (cd "$repo" && env -u VIGIL_SESSION_ID \
+        GIT_CONFIG_GLOBAL=/dev/null \
         git "${GIT_ID[@]}" commit --allow-empty -qm 'initial')
     write_coverage_settings "$repo"
 }

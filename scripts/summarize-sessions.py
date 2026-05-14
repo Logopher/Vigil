@@ -1,15 +1,18 @@
 #!/usr/bin/env python3
 """summarize-sessions.py — Per-session tool-use summary from Vigil tool logs.
 
-Reads tools-<session>.jsonl files written by the `vigil-hook log-tool-use` hook and
-outputs a JSON array with one summary row per session, joinable with sidecar
-data by session_id prefix.
+Reads tools-<harness_session_id>.jsonl files written by the `vigil-hook
+log-tool-use` hook and outputs a JSON array with one summary row per
+session. The Vigil session_id is read from each record's content
+(`vigil_session_id` field) rather than the filename, which is now the
+harness UUID.
 
 Usage:
     summarize-sessions.py [--log-dir DIR] [--output FILE] [--csv]
 
 Output fields per session:
-    session_id             — session ID string (from filename)
+    harness_session_id     — Claude Code session UUID (from filename)
+    vigil_session_id       — wall-clock anchor (from record content; may be empty)
     total_calls            — number of PreToolUse entries
     by_tool                — object mapping tool name to call count
     bash_to_read           — Bash count / Read count, or null if no Reads
@@ -71,7 +74,7 @@ def _key_input(tool: str, input_obj: dict) -> str:
     return json.dumps(input_obj, sort_keys=True)
 
 
-def _summarize(session_id: str, path: Path) -> Optional[dict]:
+def _summarize(harness_session_id: str, path: Path) -> Optional[dict]:
     """Parse one tools-*.jsonl file and return a summary dict, or None."""
     try:
         text = path.read_text(encoding="utf-8")
@@ -86,6 +89,7 @@ def _summarize(session_id: str, path: Path) -> Optional[dict]:
     error_calls = 0
     blind_retries = 0
     cumulative_duration_ms = 0
+    vigil_session_id = ""
 
     # Keyed by tool_use_id so PostToolUse can retrieve its Pre's key_input.
     pre_inputs: Dict[str, str] = {}
@@ -111,6 +115,11 @@ def _summarize(session_id: str, path: Path) -> Optional[dict]:
         event = entry.get("event", "")
         tool = entry.get("tool", "")
         tid = entry.get("tool_use_id", "")
+
+        # Every record carries vigil_session_id; first non-empty wins. The hook
+        # writes the same value to every record so any sample suffices.
+        if not vigil_session_id:
+            vigil_session_id = entry.get("vigil_session_id", "") or ""
 
         if event == "PreToolUse":
             by_tool[tool] = by_tool.get(tool, 0) + 1
@@ -139,7 +148,8 @@ def _summarize(session_id: str, path: Path) -> Optional[dict]:
     bash_to_read = round(bash / read, 3) if read > 0 else None
 
     return {
-        "session_id":             session_id,
+        "harness_session_id":     harness_session_id,
+        "vigil_session_id":       vigil_session_id,
         "total_calls":            sum(by_tool.values()),
         "by_tool":                by_tool,
         "bash_to_read":           bash_to_read,
@@ -153,7 +163,8 @@ def _to_csv(rows: List[dict]) -> str:
     """Flatten summary rows to CSV. by_tool is serialized as a JSON string."""
     if not rows:
         return ""
-    fields = ["session_id", "total_calls", "by_tool", "bash_to_read",
+    fields = ["harness_session_id", "vigil_session_id", "total_calls",
+              "by_tool", "bash_to_read",
               "error_calls", "blind_retries", "cumulative_duration_ms"]
     buf = io.StringIO()
     writer = csv.DictWriter(buf, fieldnames=fields, extrasaction="ignore")
@@ -197,8 +208,10 @@ def main(argv: List[str]) -> int:
 
     rows = []
     for path in sorted(log_dir.glob("tools-*.jsonl")):
-        session_id = path.stem[len("tools-"):]
-        row = _summarize(session_id, path)
+        # Filename stem is the harness session_id (Claude Code UUID); the
+        # Vigil session_id is read from each record's vigil_session_id field.
+        harness_session_id = path.stem[len("tools-"):]
+        row = _summarize(harness_session_id, path)
         if row is not None:
             rows.append(row)
 

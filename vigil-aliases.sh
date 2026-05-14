@@ -51,7 +51,10 @@ _vigil_run_with_logging() (
     # Optional post-scrub env injection. Lets users wire up opt-in
     # vars — notably an ssh-agent socket for signed commits — without
     # leaking them into every interactive shell via ~/.bashrc. The
-    # file is sourced, so keep it to `export VAR=value` lines.
+    # file is sourced as shell, so keep it to `export VAR=value` lines.
+    # Trust note: this is the one file in ~/.config/vigil/ whose
+    # contents are executed, not read as data. Treat it like ~/.bashrc;
+    # Vigil's threat model assumes the operator's home is not hostile.
     if [[ -f "$HOME/.config/vigil/signing.env" ]]; then
         # shellcheck disable=SC1091
         . "$HOME/.config/vigil/signing.env"

@@ -82,6 +82,8 @@ The allowlist is extensible from the operator's own `~/.bashrc`:
 _vigil_env_allowlist+=(AWS_PROFILE AWS_REGION)
 ```
 
+**`signing.env` is operator-controlled and shell-sourced.** The wrappers source `~/.config/vigil/signing.env` (if present) after the env scrub, to re-introduce specific vars like `SSH_AUTH_SOCK` for commit signing without leaking them into every interactive shell. The file is sourced as shell, not parsed as a static format, so an attacker with write access to it gets arbitrary shell-code execution in the wrapper subshell. Vigil treats `signing.env` the way it treats `~/.bashrc` and the operator's `PATH`: the trust assumption is that the home directory has not been compromised. OS compromise is out of scope (see *Not anticipated*); an attacker with write access to `signing.env` already has equivalent reach via dotfiles.
+
 ### Commit-review gate (opt-in)
 
 An optional per-repo pre-push hook installed via `vigil-install-review <repo>`. When present, every commit in the outgoing ref-range is rendered through `vigil-review` before the push proceeds, with a paranoid sanitizer that strips ANSI escapes, C1 controls, and Unicode BIDI marks so a hostile commit message cannot spoof the review UI. The operator confirms y/N; a no aborts the push.

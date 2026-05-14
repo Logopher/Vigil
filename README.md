@@ -90,6 +90,21 @@ The **default profile** is safe by construction: plan mode, the hard deny list, 
 
 `vigil-log-prune` deletes old session logs from `~/vigil-logs/`. A `SessionStart` hook runs the same pruner automatically with defaults of 90 days and 2 GB total. For manual pruning, pass custom thresholds: `vigil-log-prune --older-than 30d --dry-run`.
 
+## Optional: commit signing
+
+If you sign git commits via SSH or GPG, the env-scrub layer (which protects credentials) also unsets `SSH_AUTH_SOCK` and similar variables, breaking signing inside Vigil sessions. Re-introduce only the variables you need by creating `~/.config/vigil/signing.env`, which the wrappers source after scrubbing:
+
+```
+mkdir -p ~/.config/vigil
+cat > ~/.config/vigil/signing.env <<'EOF'
+export SSH_AUTH_SOCK="$XDG_RUNTIME_DIR/ssh-agent.socket"
+EOF
+```
+
+The single-quoted heredoc (`<<'EOF'`) preserves `$XDG_RUNTIME_DIR` literally in the file; it expands later, when the wrapper sources `signing.env` against your live shell environment. The exact value of `SSH_AUTH_SOCK` depends on your platform and agent (gnome-keyring, gpg-agent, 1Password, etc.). Run `echo "$SSH_AUTH_SOCK"` in a working shell — one where signing already succeeds outside Vigil — to discover yours.
+
+**Trust note.** `signing.env` is sourced as shell, not parsed as a static key-value format. Its contents execute with full operator privileges in the wrapper subshell — treat it the way you treat `~/.bashrc`. Vigil assumes the operator's home directory is not hostile; if that assumption breaks, an attacker with write access to `signing.env` already has equivalent reach via other dotfiles. See [`THREAT_MODEL.md`](THREAT_MODEL.md) (env-scrub layer; *Not anticipated → OS compromise*).
+
 ## Commit-review gate (opt-in)
 
 An optional per-repo pre-push review, installed by running `vigil-install-review` inside the target repo. Each outgoing commit is rendered with a paranoid sanitizer (stripping ANSI, C1, and BIDI escapes) and the operator confirms y/N before the push proceeds. See [`THREAT_MODEL.md`](THREAT_MODEL.md#commit-review-gate-opt-in) for scope, silent-skip failure modes, and the cases where server-side branch protection is the correct layer instead.

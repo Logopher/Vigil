@@ -96,11 +96,13 @@ home=$(mktmp)
 install_into "$home"
 # Simulate Claude Code runtime state — none of these files originate
 # from install.sh and uninstall must not touch them.
-mkdir -p "$home/.claude/projects/foo" "$home/.claude/sessions" "$home/.claude/statsig"
+mkdir -p "$home/.claude/projects/foo" "$home/.claude/sessions" "$home/.claude/statsig" \
+         "$home/.claude/hooks"
 echo '{"key":"x"}'   > "$home/.claude/.credentials.json"
 echo "session log"   > "$home/.claude/history.jsonl"
 echo '{"id":"abc"}'  > "$home/.claude/projects/foo/state.json"
-# Add user files under bundled subdirs that uninstall must NOT touch.
+# Add user files under agents/ (bundled) and hooks/ (user-only post-b87386d)
+# that uninstall must NOT touch.
 echo "user-agent"    > "$home/.claude/agents/my-custom-agent.md"
 echo "user-hook"     > "$home/.claude/hooks/my-custom-hook.sh"
 

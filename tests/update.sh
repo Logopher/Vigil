@@ -102,9 +102,12 @@ check_contents "session marker"  "$home/.claude/sessions/marker.txt"      'marke
 check_contents "statsig marker"  "$home/.claude/statsig/marker.txt"       'stat'
 
 # -----------------------------------------------------------------------------
-section "User-added agent and hook preserved; bundled also present"
+section "User-added agent and hook preserved; bundled agent also present"
 home=$(mktmp)
 install_into "$home"
+# hooks/ is user-only post-b87386d (the installer no longer creates it),
+# so pre-create it before writing the user hook.
+mkdir -p "$home/.claude/hooks"
 echo "user-agent" > "$home/.claude/agents/my-custom.md"
 echo "user-hook"  > "$home/.claude/hooks/my-custom.sh"
 update_into "$home"
@@ -113,7 +116,6 @@ check_present "user agent"           "$home/.claude/agents/my-custom.md"
 check_present "user hook"            "$home/.claude/hooks/my-custom.sh"
 check_present "bundled architect"    "$home/.claude/agents/architect.md"
 check_present "bundled code-reviewer" "$home/.claude/agents/code-reviewer.md"
-check_present "bundled prune-worktrees" "$home/.claude/hooks/prune-worktrees.sh"
 
 # -----------------------------------------------------------------------------
 section "User-added policy preserved; bundled also present"

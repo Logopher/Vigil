@@ -9,7 +9,7 @@ REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 SCRIPT="$REPO_DIR/scripts/prune-logs.py"
 
 failed=0
-pass() { printf '  PASS  %s\n' "$1"; }
+pass() { [[ "${VIGIL_TESTS_VERBOSE:-0}" == "1" ]] && printf '  PASS  %s\n' "$1"; return 0; }
 fail() { printf '  FAIL  %s\n' "$1" >&2; failed=1; }
 section() { printf '\n-- %s --\n' "$1"; }
 
@@ -118,7 +118,7 @@ fi
 # -----------------------------------------------------------------------------
 printf '\n'
 if [[ $failed -eq 0 ]]; then
-    echo "prune-logs: all passed"
+    [[ "${VIGIL_TESTS_VERBOSE:-0}" == "1" ]] && echo "prune-logs: all passed"
     exit 0
 else
     echo "prune-logs: FAILED"

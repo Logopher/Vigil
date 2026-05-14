@@ -11,7 +11,7 @@ shopt -s nullglob
 REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 
 failed=0
-pass() { printf '  PASS  %s\n' "$1"; }
+pass() { [[ "${VIGIL_TESTS_VERBOSE:-0}" == "1" ]] && printf '  PASS  %s\n' "$1"; return 0; }
 fail() { printf '  FAIL  %s\n' "$1" >&2; failed=1; }
 section() { printf '\n-- %s --\n' "$1"; }
 
@@ -393,7 +393,7 @@ else
 fi
 
 # Multi-word PAGER (e.g. PAGER="less -R") must work via eval path.
-out=$(HOME="$fake_home" PAGER="cat -" vigil-log)
+out=$(HOME="$fake_home" PAGER="cat --" vigil-log)
 if [[ -n "$out" ]]; then
     pass "vigil-log handles multi-word PAGER"
 else

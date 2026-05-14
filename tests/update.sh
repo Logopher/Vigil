@@ -12,7 +12,7 @@ shopt -s nullglob
 REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 
 failed=0
-pass() { printf '  PASS  %s\n' "$1"; }
+pass() { [[ "${VIGIL_TESTS_VERBOSE:-0}" == "1" ]] && printf '  PASS  %s\n' "$1"; return 0; }
 fail() { printf '  FAIL  %s\n' "$1" >&2; failed=1; }
 section() { printf '\n-- %s --\n' "$1"; }
 
@@ -163,7 +163,10 @@ exit 1
 SHIM
 chmod +x "$shimdir/python3"
 
-out=$(HOME="$home" PATH="$shimdir:$PATH" bash "$REPO_DIR/update.sh" -y 2>&1)
+out=$(HOME="$home" PATH="$shimdir:$PATH" \
+    VIGIL_HOOK_INSTALL_DIR="$home/dev-bin" \
+    VIGIL_UNSAFE_SKIP_SUDO=1 \
+    bash "$REPO_DIR/update.sh" -y 2>&1)
 rc=$?
 
 if [[ $rc -ne 0 ]]; then

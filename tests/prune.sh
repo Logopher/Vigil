@@ -15,7 +15,7 @@ REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 HOOK="$REPO_DIR/scripts/vigil-hook"
 
 failed=0
-pass() { printf '  PASS  %s\n' "$1"; }
+pass() { [[ "${VIGIL_TESTS_VERBOSE:-0}" == "1" ]] && printf '  PASS  %s\n' "$1"; return 0; }
 fail() { printf '  FAIL  %s\n' "$1" >&2; failed=1; }
 section() { printf '\n-- %s --\n' "$1"; }
 

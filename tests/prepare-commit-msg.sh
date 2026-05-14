@@ -9,7 +9,7 @@ REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 HOOK="$REPO_DIR/scripts/hooks/prepare-commit-msg"
 
 failed=0
-pass() { printf '  PASS  %s\n' "$1"; }
+pass() { [[ "${VIGIL_TESTS_VERBOSE:-0}" == "1" ]] && printf '  PASS  %s\n' "$1"; return 0; }
 fail() { printf '  FAIL  %s\n' "$1" >&2; failed=1; }
 section() { printf '\n-- %s --\n' "$1"; }
 
@@ -156,7 +156,7 @@ n=$(trailer_count "$repo")
 # -----------------------------------------------------------------------------
 echo
 if [[ $failed -eq 0 ]]; then
-    echo "All prepare-commit-msg tests passed."
+    [[ "${VIGIL_TESTS_VERBOSE:-0}" == "1" ]] && echo "All prepare-commit-msg tests passed."
     exit 0
 else
     echo "Some prepare-commit-msg tests FAILED." >&2

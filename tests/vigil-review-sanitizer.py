@@ -8,6 +8,7 @@ stray C0 bytes) and assert the sanitizer's output contains no interpretable
 escape sequences and is idempotent.
 """
 import importlib.util
+import os
 import sys
 from pathlib import Path
 
@@ -34,7 +35,8 @@ def section(title: str) -> None:
 def check(name: str, cond: bool, detail: str = '') -> None:
     global failed
     if cond:
-        print(f'  PASS  {name}')
+        if os.environ.get('VIGIL_TESTS_VERBOSE') == '1':
+            print(f'  PASS  {name}')
     else:
         print(f'  FAIL  {name} {detail}', file=sys.stderr)
         failed += 1

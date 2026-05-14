@@ -36,7 +36,7 @@ if [[ ! -x "$VIGIL_HOOK" ]]; then
 fi
 
 failed=0
-pass()    { printf '  PASS  %s\n' "$1"; }
+pass()    { [[ "${VIGIL_TESTS_VERBOSE:-0}" == "1" ]] && printf '  PASS  %s\n' "$1"; return 0; }
 fail()    { printf '  FAIL  %s\n' "$1" >&2; failed=1; }
 section() { printf '\n-- %s --\n' "$1"; }
 
@@ -172,7 +172,7 @@ expect_allow validate-memory-write \
 # =====================================================================
 
 if [[ $failed -eq 0 ]]; then
-    printf '\nvigil-hook: all tests passed.\n'
+    [[ "${VIGIL_TESTS_VERBOSE:-0}" == "1" ]] && printf '\nvigil-hook: all tests passed.\n'
     exit 0
 else
     printf '\nvigil-hook: failures present.\n' >&2

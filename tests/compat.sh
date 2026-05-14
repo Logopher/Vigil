@@ -16,9 +16,9 @@ REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 ALIASES="$REPO_DIR/vigil-aliases.sh"
 
 failed=0
-pass() { printf '  PASS  %s\n' "$1"; }
+pass() { [[ "${VIGIL_TESTS_VERBOSE:-0}" == "1" ]] && printf '  PASS  %s\n' "$1"; return 0; }
 fail() { printf '  FAIL  %s\n' "$1" >&2; failed=1; }
-skip() { printf '  SKIP  %s\n' "$1"; }
+skip() { [[ "${VIGIL_TESTS_VERBOSE:-0}" == "1" ]] && printf '  SKIP  %s\n' "$1"; return 0; }
 section() { printf '\n-- %s --\n' "$1"; }
 
 TMPDIRS=()

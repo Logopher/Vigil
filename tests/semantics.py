@@ -7,6 +7,7 @@ cleanly with the profile.
 import difflib
 import fnmatch
 import json
+import os
 import re
 import sys
 from pathlib import Path
@@ -29,7 +30,8 @@ failed = False
 
 
 def pass_(msg: str) -> None:
-    print(f"  PASS  {msg}")
+    if os.environ.get("VIGIL_TESTS_VERBOSE") == "1":
+        print(f"  PASS  {msg}")
 
 
 def fail(msg: str) -> None:

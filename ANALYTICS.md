@@ -195,10 +195,15 @@ caching"). The architectural constraints (caching by stable IDs; LLM never sees 
 
 ## Presentation
 
-`vigil-report` (planned) writes a static HTML page to `~/vigil-reports/YYYY-MM-DD.html` —
-single page, all data baked in (no server, no live queries), sortable tables for
-sessions / commits / bugs, light charts for cost trends and cache ratio. Tracked in
-`BACKLOG.md` ("`vigil-report` static HTML generator").
+`vigil-sessions.py --db` materializes per-session rows into a SQLite store at
+`~/vigil-logs/sessions.db` (schema in `scripts/vigil_sessions_db.py`).
+`vigil-report.py` reads that store and writes a single-page HTML report to
+`~/vigil-reports/YYYY-MM-DD.html` — all data baked in (no server, no external
+resources, opens offline), sortable columns via embedded JS. Both shipped in
+v1.5. The task-oriented user guide lives at [`ANALYTICS_GUIDE.md`](ANALYTICS_GUIDE.md);
+deferred follow-ups (per-tool attribution from `tools-*.jsonl`, inline SVG charts,
+anomaly detection, orphan-row cleanup, cross-machine sync) are in
+`BACKLOG.md` under "Analytics — Vigil layer improvements".
 
 The static-report-first sequencing is deliberate: a one-shot HTML generator hits ~80% of
 the value a GUI would provide at ~20% of the cost. If users start asking "can I drill

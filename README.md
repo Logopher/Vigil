@@ -105,7 +105,7 @@ python3 ~/.config/vigil/scripts/vigil-report.py  --db ~/vigil-logs/sessions.db
 
 The report opens in any browser — no server, no external resources, sortable columns. Re-running the ingest is incremental: sidecars whose mtime hasn't advanced are skipped, so it's safe to wire into a cron or call by hand whenever the report needs refreshing.
 
-**v1.5 acceptance test.** Point at a real `~/vigil-logs/` containing at least one sidecar whose `ccusage_jsonl` field resolves to an existing file. Delete any prior `~/vigil-logs/sessions.db` to force a fresh migration. Run the two commands above; open `~/vigil-reports/$(date +%F).html`. Rows should render with non-NULL token totals and the default sort is `total_tokens DESC NULLS LAST, started_at DESC`. Re-running the ingest with no new sessions should report `mtime-unchanged: N` for every prior sidecar and zero new upserts. Sidecar fields and stability promises are documented in [`ANALYTICS.md`](ANALYTICS.md#stable-contract).
+See [`ANALYTICS_GUIDE.md`](ANALYTICS_GUIDE.md) for the full user guide: filter flags, column meanings, how to read the ingest summary, pricing configuration, where data lives, and common questions. The architecture and sidecar schema are in [`ANALYTICS.md`](ANALYTICS.md); the "Stable contract" subsection pins the schema for external consumers.
 
 ## Updating
 

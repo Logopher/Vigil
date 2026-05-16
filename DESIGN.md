@@ -54,7 +54,7 @@ Three policies ship:
 
 ### Why strict is default
 
-The secure posture should be the default and the easy path. Elevation — switching to `dev` or `yolo` — is a deliberate per-session choice, the way `sudo` is a deliberate per-command choice. A user who hits a permission block reconsiders whether the action is one they actually wanted; that pause is the feature, not the friction. If elevation is frequent for a given workflow, invoking `vigil-dev` (or `claude --settings …`) for that session restores the flow. The inverse — permissive by default, tighten when something goes wrong — means discovering the posture mismatch after damage is already done.
+The secure posture should be the default and the easy path. Elevation — switching to `dev` or `yolo` — is a deliberate per-session choice, the way `sudo` is a deliberate per-command choice. A user who hits a permission block reconsiders whether the action is one they actually wanted; that pause is the feature, not the friction. If elevation is frequent for a given workflow, invoking `vigil-dev` (or `claude --settings …`) for that session restores the flow. The inverse — permissive by default, tighten when something goes wrong — means discovering the posture mismatch after damage is already done. The `permissive` profile is shipped as an opt-in alternative for users whose workflow consistently outgrows the default's friction, but the swap is an explicit `vigil set-default permissive` — never automatic — preserving the same "elevation is deliberate" property.
 
 ### When to reach for each policy
 
@@ -82,14 +82,14 @@ The sandbox has one deliberate exception: commands listed in `sandbox.excludedCo
 
 `install.sh` performs these steps:
 
-1. Check every destination for existing content. If any of `~/.claude`, `~/.config/vigil/vigil-aliases.sh`, `~/.config/vigil/policies/<name>.json`, `~/.config/vigil/profiles/default`, or `~/.config/vigil/scripts` already exists, the installer prints the conflicting paths to stderr and exits non-zero. There is no `--force` flag.
+1. Check every destination for existing content. If any of `~/.claude`, `~/.config/vigil/vigil-aliases.sh`, `~/.config/vigil/policies/<name>.json`, `~/.config/vigil/profiles/default`, `~/.config/vigil/profiles/permissive`, or `~/.config/vigil/scripts` already exists, the installer prints the conflicting paths to stderr and exits non-zero. There is no `--force` flag.
 2. Copy `vigil-aliases.sh` to `~/.config/vigil/vigil-aliases.sh`.
 3. For each policy file, substitute `{{HOME}}` with the user's home directory and write to `~/.config/vigil/policies/<name>.json`. Non-template policy files (`yolo.json`) are copied verbatim.
 4. Copy management scripts to `~/.config/vigil/scripts/` and make them executable.
-5. Copy the default profile directly into `~/.claude/`. Copy `settings.json` verbatim. Process `settings.local.template.json` through the standard `{{HOME}}`/`{{PROFILE_DIR}}` substitution pass and write as `settings.local.json`.
+5. Copy the default profile directly into `~/.claude/`, and the permissive profile into `~/.config/vigil/profiles/permissive/`. For each, copy `settings.json` verbatim, process `settings.local.template.json` through the standard `{{HOME}}`/`{{PROFILE_DIR}}` substitution pass, and write the result as `settings.local.json`.
 6. Set the executable bit on the management scripts and review-gate hook templates copied in step 4.
-7. Run `scripts/filter-sandbox-denies.py` against the generated `~/.claude/settings.json` to drop any `sandbox.filesystem.denyRead` entry that is a symlink, missing, or the wrong type. Bubblewrap fails closed if any denyRead entry cannot be mounted over; this filter prevents a confusing "every Bash subprocess fails" failure mode.
-8. Create a convenience symlink at `~/.config/vigil/profiles/default` pointing to `~/.claude`, so the multi-profile layout convention holds for docs and any future additional profiles.
+7. Run `scripts/filter-sandbox-denies.py` against each profile's generated `settings.json` (default at `~/.claude/settings.json`, permissive at `~/.config/vigil/profiles/permissive/settings.json`) to drop any `sandbox.filesystem.denyRead` entry that is a symlink, missing, or the wrong type. Bubblewrap fails closed if any denyRead entry cannot be mounted over; this filter prevents a confusing "every Bash subprocess fails" failure mode.
+8. Create a convenience symlink at `~/.config/vigil/profiles/default` pointing to `~/.claude`, so the default profile appears at the multi-profile layout path alongside `permissive/`.
 9. Print a reminder to source `vigil-aliases.sh` from the user's shell rc.
 
 The installer is deliberately simple: check, copy, substitute, filter, symlink. No dependency installation, no service registration, no shell-rc editing. Every path it touches is owned by the user; no `sudo` is required.

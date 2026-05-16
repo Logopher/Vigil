@@ -161,6 +161,13 @@ def _ctx_vigil_session_id(ctx):
     return ctx.get('vigil_session_id') or ''
 
 
+def _ctx_launch_cwd(ctx):
+    """Read the wrapper-recorded launch CWD from the per-session JSON."""
+    if not isinstance(ctx, dict):
+        return ''
+    return ctx.get('cwd') or ''
+
+
 # ---------- log-tool-use ----------
 
 def cmd_log_tool_use():
@@ -243,13 +250,34 @@ def cmd_validate_memory_write():
         return 0
 
     target_slug = parts[0]
-    cwd = os.path.normpath(event_data.get('cwd', '').strip())
-    if not cwd or cwd == '.':
-        print('vigil-hook validate-memory-write: cwd missing from hook event; allowing write',
+    # Source the session's project slug from the wrapper-recorded launch
+    # cwd, not event_data['cwd']. The harness updates event_data['cwd']
+    # whenever the LLM runs `cd` via the Bash tool, so deriving the slug
+    # from it would drift away from the fixed slug Claude Code assigned
+    # at session launch and cause same-project memory writes to be denied.
+    harness_session_id = event_data.get('session_id', '')
+    ctx = _load_session_context(harness_session_id, os.getppid())
+    if ctx is None:
+        print('vigil-hook validate-memory-write: session context unavailable; allowing write',
+              file=sys.stderr)
+        return 0
+    launch_cwd = _ctx_launch_cwd(ctx)
+    if not launch_cwd:
+        print('vigil-hook validate-memory-write: launch cwd missing from session context; allowing write',
               file=sys.stderr)
         return 0
 
-    expected_slug = cwd.replace('/', '-')
+    # Slug algorithm: normpath then replace('/', '-') on an absolute path.
+    # Claude Code's own project-storage scheme produces the same slug from
+    # the launch cwd — `/home/grault/code/vigil` becomes
+    # `-home-grault-code-vigil`, leading `-` and all — so the comparison
+    # against target_slug (extracted from the file path's
+    # ~/.claude/projects/<slug>/ component) is apples-to-apples. If a
+    # future Claude Code release ever stops emitting the leading `-`, the
+    # tests at tests/vigil-hook.sh will fail (same-project writes start
+    # being denied) before this rolls out. Do not "fix" the leading `-`
+    # without also realigning Claude Code's actual slug layout.
+    expected_slug = os.path.normpath(launch_cwd).replace('/', '-')
     if target_slug == expected_slug:
         return 0
 

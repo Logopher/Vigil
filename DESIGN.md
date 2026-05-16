@@ -35,9 +35,9 @@ The copy firewall depends on a second rule: Claude never runs `install.sh`. An a
 A profile directory contains:
 
 - `settings.json` — static, host-independent configuration: sandbox mode and the non-path-dependent baseline deny list. Installed verbatim; identical in the repo and on the target machine.
-- `settings.local.template.json` — host-local slot for permissions additions. Currently an empty `deny` array; sandbox-layer enforcement for credential paths, shell dotfiles, and Vigil config lives in `MASTER_DENY_READ`/`MASTER_DENY_WRITE` (`scripts/filter-sandbox-denies.py`). Processed through the standard `{{HOME}}`/`{{PROFILE_DIR}}` substitution pass at install time (currently a no-op since the template has no placeholders) and written as `settings.local.json`. Claude Code unions the `deny` arrays from both files at session start.
+- `settings.local.template.json` — host-local permission-layer denies for paths that the in-process Write/Edit/MultiEdit tools could otherwise reach (Vigil's own config, shell rc files, `.gitconfig`, and other enforcement-surface files). Sandbox-layer enforcement for credential reads is a separate concern, handled by `MASTER_DENY_READ`/`MASTER_DENY_WRITE` in `scripts/filter-sandbox-denies.py`. Processed through the standard `{{HOME}}`/`{{PROFILE_DIR}}` substitution pass at install time and written as `settings.local.json`. Claude Code unions the `deny` arrays from both files at session start.
 - `CLAUDE.md` — instructions for Claude in every session under this profile. Covers commit discipline, agent-gate workflow, operational notes.
-- `hooks/*.sh` — scripts fired at session start/end and around tool use. Currently: worktree cleanup, tool-use logging, tool-result logging.
+- Hook wiring (inside `settings.json`'s `hooks` block) — bare `vigil-hook <subcommand>` invocations dispatched through the sudo-installed `/usr/local/bin/vigil-hook` Python binary. The profile bundle does not contain hook scripts of its own. See the project `CLAUDE.md` for the dispatcher subcommand list.
 - `agents/*.md` — specialist agent definitions (`architect`, `code-reviewer`) available in every session.
 
 Only one profile ships today: `default`. The layout supports additional profiles alongside it. Profile selection uses the `CLAUDE_CONFIG_DIR` environment variable, which defaults to `~/.claude` — the installer symlinks `~/.claude` to the default profile, so no env var is needed for the common case.
@@ -86,8 +86,8 @@ The sandbox has one deliberate exception: commands listed in `sandbox.excludedCo
 2. Copy `vigil-aliases.sh` to `~/.config/vigil/vigil-aliases.sh`.
 3. For each policy file, substitute `{{HOME}}` with the user's home directory and write to `~/.config/vigil/policies/<name>.json`. Non-template policy files (`yolo.json`) are copied verbatim.
 4. Copy management scripts to `~/.config/vigil/scripts/` and make them executable.
-5. Copy the default profile directly into `~/.claude/`. Copy `settings.json` verbatim. Process `settings.local.template.json` through the standard `{{HOME}}`/`{{PROFILE_DIR}}` substitution pass and write as `settings.local.json` (currently a no-op as the template contains no placeholders).
-6. Ensure hook scripts are executable.
+5. Copy the default profile directly into `~/.claude/`. Copy `settings.json` verbatim. Process `settings.local.template.json` through the standard `{{HOME}}`/`{{PROFILE_DIR}}` substitution pass and write as `settings.local.json`.
+6. Set the executable bit on the management scripts and review-gate hook templates copied in step 4.
 7. Run `scripts/filter-sandbox-denies.py` against the generated `~/.claude/settings.json` to drop any `sandbox.filesystem.denyRead` entry that is a symlink, missing, or the wrong type. Bubblewrap fails closed if any denyRead entry cannot be mounted over; this filter prevents a confusing "every Bash subprocess fails" failure mode.
 8. Create a convenience symlink at `~/.config/vigil/profiles/default` pointing to `~/.claude`, so the multi-profile layout convention holds for docs and any future additional profiles.
 9. Print a reminder to source `vigil-aliases.sh` from the user's shell rc.
@@ -101,10 +101,6 @@ The session wrappers in `vigil-aliases.sh` re-run `filter-sandbox-denies.py` on 
 The default profile shares a directory (`~/.claude`) with Claude Code's own runtime state — credentials (`.credentials.json`), session history (`history.jsonl`, `sessions/`), file edit history (`file-history/`), cache, and per-project state. Automatic overwrite-on-reinstall would risk clobbering credentials and session history.
 
 The installer declines to distinguish "files we own" from "Claude Code's runtime state" heuristically, because heuristics here have a failure mode where the installer silently deletes something valuable. Refusing to run when conflicts exist forces the operator to inspect the state explicitly and move anything worth keeping before proceeding.
-
-### Why `{{PROFILE_DIR}}` resolves to `~/.claude`
-
-Hook references in `settings.json` (e.g., `command: {{PROFILE_DIR}}/hooks/prune-worktrees.sh`) are substituted to `$HOME/.claude/hooks/prune-worktrees.sh` — the canonical, real path — rather than to the convenience symlink at `~/.config/vigil/profiles/default`. Hook execution never resolves through a symlink, which avoids a class of sandbox-interaction bugs and keeps the runtime path identity-stable if the symlink is later changed or removed.
 
 ## Session wrappers
 
@@ -146,7 +142,7 @@ Patterns that have caused multiple bugs in this repo's history. Captured here so
 
 **`set -e` plus `[[ ... ]] &&` idiom.** A line of the form `[[ -f "$x" ]] && do_something` reads as a no-op when the test is false, but actually returns non-zero — which under `errexit` aborts the whole script. The fix is `if [[ -f "$x" ]]; then do_something; fi`. The `&&` form is shorter and looks idiomatic, which is why it recurs. Watch for: any hook or shell wrapper that needs to no-op when a precondition is absent.
 
-**Stale mental model of installed layout versus repo layout.** Edits think in repo terms (the source under `profiles/default/`, with hooks bundled in `default.zip`) but the runtime resolves against the installed copy at `~/.claude/hooks/foo.sh` and `~/.config/vigil/scripts/`. Fixes that work in tests can fail at runtime when the executing path doesn't match post-`install.sh` reality, and vice versa. Watch for: any change that touches a hook command path, a `{{PROFILE_DIR}}` substitution, or a script invocation by absolute path.
+**Stale mental model of installed layout versus repo layout.** Edits think in repo terms (the source under `profiles/default/`, `scripts/`) but the runtime resolves against the installed copy: `settings.json` hooks call `vigil-hook` on `PATH` (sudo-installed at `/usr/local/bin/vigil-hook`), and the dispatcher reads helper scripts from `~/.config/vigil/scripts/`. Fixes that work in tests can fail at runtime when the executing path doesn't match post-`install.sh` reality, and vice versa. Watch for: any change that touches a hook command name, a `{{PROFILE_DIR}}` substitution, or a script invocation by absolute path.
 
 **Tests tracking implementation rather than threat model.** A test that asserts on the exact bytes of `settings.json` passes whenever the bytes happen to match — even when the effective permission decision has regressed. A test that exercises the actual deny outcome catches the regression. The first form is easier to write and more brittle; the second is what protects the security claim. Watch for: tests that compare JSON shape rather than evaluate the harness's effective behavior.
 

@@ -1,6 +1,6 @@
 # Vigil
 
-**Paranoid-by-default configuration for Claude Code.** Layered deny-lists, OS-level sandboxing, session audit hooks, and an install discipline that refuses to clobber existing state.
+**Default-deny configuration for Claude Code.** Layered deny-lists, OS-level sandboxing, session audit hooks, and an install discipline that refuses to clobber existing state.
 
 ## What Vigil does
 

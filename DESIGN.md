@@ -82,7 +82,7 @@ The sandbox has one deliberate exception: commands listed in `sandbox.excludedCo
 
 `install.sh` performs these steps:
 
-1. Check every destination for existing content. If any of `~/.claude`, `~/.config/vigil/vigil-aliases.sh`, `~/.config/vigil/policies/<name>.json`, `~/.config/vigil/profiles/default`, `~/.config/vigil/profiles/permissive`, or `~/.config/vigil/scripts` already exists, the installer prints the conflicting paths to stderr and exits non-zero. There is no `--force` flag.
+1. Check every destination for existing content. The check is fine-grained: specific files and subdirectories under `~/.claude/` (`settings.json`, `settings.local.json`, `settings.local.template.json`, `CLAUDE.md`, `hooks`, `agents`, `default.zip`) — not `~/.claude/` itself, which is shared with Claude Code's runtime state — plus the Vigil-owned paths under `~/.config/vigil/` (`vigil-aliases.sh`, `doctor.sh`, `pyszz.yml`, `profiles/default`, `profiles/permissive`, `scripts`, and each `policies/<name>.json`). If any already exists, the installer prints the conflicting paths to stderr and exits non-zero. There is no `--force` flag.
 2. Copy `vigil-aliases.sh` to `~/.config/vigil/vigil-aliases.sh`.
 3. For each policy file, substitute `{{HOME}}` with the user's home directory and write to `~/.config/vigil/policies/<name>.json`. Non-template policy files (`yolo.json`) are copied verbatim.
 4. Copy management scripts to `~/.config/vigil/scripts/` and make them executable.

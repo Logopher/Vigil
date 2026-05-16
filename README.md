@@ -165,6 +165,7 @@ Removes only files placed by `install.sh`. Claude Code runtime state in `~/.clau
 - [`THREAT_MODEL.md`](THREAT_MODEL.md) — what Vigil protects against at each layer, what it explicitly does not, and the adversary models that are and aren't in scope.
 - [`COMPATIBILITY.md`](COMPATIBILITY.md) — per-platform support status and known gaps (Linux / WSL2 / macOS / native Windows).
 - [`AUDIENCE.md`](AUDIENCE.md) — the longer version of "who this is for," including common misconceptions and a self-check.
+- [`GENERALIZATION.md`](GENERALIZATION.md) — design exploration for generalizing Vigil beyond Claude Code; documents the agent-agnostic / agent-specific design distinction and the 2026-05-13 calibration. Generalization is anticipated, not committed.
 - [`LIFECYCLE.md`](LIFECYCLE.md) — project stage framework. Vigil is pre-1.0; interfaces may change.
 - [Commit-review gate](THREAT_MODEL.md#commit-review-gate-opt-in) — scope and limits of the opt-in pre-push gate.
 - [`BACKLOG.md`](BACKLOG.md) — longer tail of ideas and deferred work.

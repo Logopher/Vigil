@@ -81,9 +81,9 @@ The **default profile** is safe by construction: plan mode, the hard deny list, 
 
 | Wrapper | Equivalent | Notes |
 |---|---|---|
-| `vigil` | bare `claude` | default profile baseline; plan mode; session logging via `script(1)` |
+| `vigil` | `claude --settings .../policies/strict.json` | strict policy; session logging via `script(1)` |
 | `vigil-dev` | `claude --settings .../policies/dev.json` | `cd` to git root; uninterrupted dev work; safety gates on risky ops |
-| `vigil-strict` | `claude --settings .../policies/strict.json` | same as the default profile baseline, made explicit |
+| `vigil-strict` | (same as `vigil`) | explicit-policy form; pairs with `vigil-dev` and `vigil-yolo` for naming symmetry |
 | `vigil-yolo` | `claude --settings .../policies/yolo.json` | bypasses confirmations; retains `rm` and `sudo` denies |
 
 `vigil-log` opens a session transcript in `$PAGER`. With no arguments it shows the most recent session; `vigil-log -1` shows the previous one (`-2` the one before that); `vigil-log 20260413` (or `2026-04-13`) opens the most recent transcript matching that date prefix.

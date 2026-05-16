@@ -48,7 +48,7 @@ A policy is a JSON fragment consumed via `claude --settings <policy-path>`. It o
 
 Three policies ship:
 
-- **`strict`** — matches the default profile's baseline. Plan mode, deny list as-is. Useful when tooling expects an explicit policy selection rather than relying on the profile default.
+- **`strict`** — matches the default profile's baseline. Plan mode, deny list as-is.
 - **`dev`** — `acceptEdits` mode with an allow list for routine dev work (read-only git, build and test runners for common languages). Ask-gates history-rewriting operations (`git commit --amend`, `git stash`) and filesystem metadata changes (`chmod`, `chown`, `mv`). Retains the deny baseline. Explicitly protects `.git/` and `.claude/` from writes.
 - **`yolo`** — `bypassPermissions` mode with only `rm` and `sudo` in the deny list. For flow; the two bright-line catastrophe guards remain.
 
@@ -110,8 +110,8 @@ Hook references in `settings.json` (e.g., `command: {{PROFILE_DIR}}/hooks/prune-
 
 `vigil-aliases.sh` defines four shell functions, all using `script(1)` to log the session. The bare `claude` command is no longer wrapped — it falls through to the upstream Claude Code binary unchanged, preserving a name for invocations that should escape Vigil's session logging and env scrubbing.
 
-- **`vigil`** — standard session under the active profile (default). No policy applied.
-- **`vigil-strict`** — session with the `strict` policy explicitly applied. Behaviorally equivalent to the default profile baseline; useful when tooling expects an explicit policy selection rather than relying on the profile default.
+- **`vigil`** — session with the `strict` policy applied. The strict policy is always passed so the operator gets a known posture regardless of which profile is active.
+- **`vigil-strict`** — equivalent to `vigil`. Exists for naming symmetry with `vigil-dev` and `vigil-yolo` so every shipped policy has a matching wrapper.
 - **`vigil-dev`** — session with the `dev` policy and the working directory pinned to the current git repository's root. The `cd` runs in a subshell so the caller's working directory is not disturbed. If the current directory is not inside a git repo, `vigil-dev` falls back to the current directory.
 - **`vigil-yolo`** — session with the `yolo` policy applied. Bypasses confirmations; retains `rm` and `sudo` denies.
 

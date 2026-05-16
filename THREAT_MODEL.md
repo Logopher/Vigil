@@ -1,6 +1,6 @@
 # THREAT_MODEL.md
 
-What this tool protects against, what it does not, and why. Read this before trusting the profile with anything you care about.
+What this tool protects against, what it does not, and why. Read this before trusting a profile with anything you care about.
 
 ## Why this document exists
 
@@ -8,7 +8,7 @@ A configuration that implies protection without delivering it is worse than no c
 
 ## Scope
 
-This document concerns the default profile, the three shipped policies (`strict`, `dev`, `yolo`), and the `vigil-dev` wrapper. It does not cover custom profiles or policies users write themselves, nor does it cover Claude Code itself beyond the surfaces this tool configures.
+This document concerns the default and permissive profiles, the three shipped policies (`strict`, `dev`, `yolo`), and the `vigil-dev` wrapper. It does not cover custom profiles or policies users write themselves, nor does it cover Claude Code itself beyond the surfaces this tool configures.
 
 The scope also assumes Claude Code is launched through the session wrappers in `vigil-aliases.sh`. Launches via the VS Code extension or the Claude Code desktop app receive the default profile's deny list, hooks, and sandbox configuration, but do not receive session logging, the environment scrub, or per-session policy selection. Mitigations that depend on the posture layer — the audit trail and the env-scrub layer described below — do not apply to desktop-app or extension launches.
 

@@ -59,9 +59,9 @@ The secure posture should be the default and the easy path. Elevation — switch
 ### When to reach for each policy
 
 - **Routine code writing in a trusted repo:** `vigil-dev`. Runs the `dev` policy with the working directory pinned to the git repository root (see [Session wrappers](#session-wrappers)).
-- **Exploratory work in an unfamiliar repo:** default profile (no `--settings`). Plan mode forces deliberate review of every action before it runs.
+- **Exploratory work in an unfamiliar repo:** `vigil` (or equivalently `vigil-strict`). Plan mode forces deliberate review of every action before it runs.
 - **Tight iteration where every prompt is friction:** `yolo`. `rm` and `sudo` still deny; everything else flows.
-- **Scripted or automated invocation where determinism matters:** `strict` as an explicit selection. Same behavior as default, but the invocation makes the policy choice visible rather than inherited.
+- **Scripted or automated invocation where determinism matters:** `strict` as an explicit `--settings` selection on a bare `claude` call. Same posture the `vigil` wrapper provides, but without the wrapper's session-logging and env-scrubbing — appropriate when the caller (CI runner, cron job) is handling those concerns separately.
 
 ### Policy does not enforce filesystem scope
 

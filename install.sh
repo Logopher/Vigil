@@ -13,8 +13,9 @@
 # can't easily replace it. The sudo prompt fires once during install.
 #
 # {{HOME}} is substituted in policy and template files. {{PROFILE_DIR}} is
-# substituted in profile templates to the live profile directory (e.g.
-# $HOME/.claude for default).
+# substituted in profile *.template.* files to the live profile directory
+# ($HOME/.claude for default, $HOME/.config/vigil/profiles/permissive for
+# permissive).
 set -euo pipefail
 shopt -s nullglob
 
@@ -206,8 +207,10 @@ for src in "$REPO_DIR/policies/"*; do
 done
 
 # Default profile installs directly into ~/.claude. {{PROFILE_DIR}}
-# substitutes to $CLAUDE_DIR — the canonical path — so settings.json
-# hook references never require resolving through the symlink.
+# substitutes to $CLAUDE_DIR in any *.template.* files copied into the
+# profile. (No shipped template currently uses {{PROFILE_DIR}} — the
+# default template uses {{HOME}} — but the substitution machinery is
+# kept for forward compatibility.)
 # Templates are kept alongside their generated output so that
 # vigil set-default can regenerate settings.local.json after a swap.
 src_profile="$REPO_DIR/profiles/default"

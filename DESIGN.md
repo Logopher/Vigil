@@ -6,7 +6,7 @@ This document explains the design choices behind Vigil: what it is for, how it i
 
 A configuration baseline and deployment mechanism for Claude Code sessions. It ships three things:
 
-1. A default profile that is safe by construction — plan mode, a hard deny list covering destructive shell patterns, session-logging hooks, and baseline agent definitions.
+1. Two profiles: a `default` that is safe by construction (plan mode, a hard deny list, session-logging hooks, baseline agents), and an opt-in `permissive` profile with a minimal profile-layer floor (only `rm`, `sudo`, `vigil-install-review` denied) so that a lighter policy like `yolo` can actually produce a lighter posture than the default profile's baseline would otherwise prevent.
 2. A small set of permission policies (`strict`, `dev`, `yolo`) that can be selected per session to change how interruptive Claude's permission gates are.
 3. An installer that copies the repo's profiles, policies, hooks, and shell aliases into `~/.config/vigil/` and `~/.claude/`.
 
@@ -40,7 +40,7 @@ A profile directory contains:
 - Hook wiring (inside `settings.json`'s `hooks` block) — bare `vigil-hook <subcommand>` invocations dispatched through the sudo-installed `/usr/local/bin/vigil-hook` Python binary. The profile bundle does not contain hook scripts of its own. See the project `CLAUDE.md` for the dispatcher subcommand list.
 - `agents/*.md` — specialist agent definitions (`architect`, `code-reviewer`) available in every session.
 
-Only one profile ships today: `default`. The layout supports additional profiles alongside it. Profile selection uses the `CLAUDE_CONFIG_DIR` environment variable, which defaults to `~/.claude` — the installer symlinks `~/.claude` to the default profile, so no env var is needed for the common case.
+Two profiles ship today: `default` (installed at `~/.claude/`, the safe-by-construction baseline) and `permissive` (installed alongside at `~/.config/vigil/profiles/permissive/`, with the lighter floor described above). The active profile — what new sessions read — is selected by `vigil set-default <profile>`, which copies the chosen bundle's contents into `~/.claude/` and then records the choice in `~/.config/vigil/active-profile` via an atomic temp-file rename. Per-session override is also available via the `CLAUDE_CONFIG_DIR` environment variable. The layout supports additional user-authored profiles alongside the two shipped.
 
 ### Policy
 

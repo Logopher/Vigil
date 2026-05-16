@@ -108,7 +108,7 @@ _vigil_run_with_logging() (
     chmod 700 "$_sessions_dir" || true
 
     local _session_file="$_sessions_dir/wrapper-$_wrapper_pid.json"
-    local _session_tmp _launched_at _safe_policy="" _safe_repo="" _safe_branch=""
+    local _session_tmp _launched_at _safe_policy="" _safe_repo="" _safe_branch="" _safe_cwd=""
     _launched_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
     # Validate every embedded value before printf-ing it into JSON.
     # VIGIL_SESSION_ID (date format) and _launched_at (ISO 8601) are safe as-is.
@@ -116,6 +116,16 @@ _vigil_run_with_logging() (
     [[ "$active_policy" =~ ^[a-zA-Z0-9_-]+$ ]] && _safe_policy="$active_policy"
     [[ "$_git_repo" =~ ^[a-zA-Z0-9._-]+$ ]] && _safe_repo="$_git_repo"
     [[ "$_git_branch" =~ ^[a-zA-Z0-9._-]+$ ]] && _safe_branch="$_git_branch"
+    # Launch CWD is read by vigil-hook validate-memory-write to compute
+    # the session's project slug. Sourcing it from session context (not
+    # from event_data['cwd']) keeps the slug stable across `cd` calls
+    # the LLM may issue mid-session. Regex matches the conservative
+    # JSON-safe subset shared by _safe_repo/_safe_branch above plus `/`;
+    # paths containing spaces, quotes, `@`, `:`, or other characters that
+    # would need JSON escaping silently leave _safe_cwd empty, and the
+    # hook fails open. That is a deliberate trade — false-open on an
+    # exotic path is preferable to corrupting the session JSON.
+    [[ "$PWD" =~ ^[a-zA-Z0-9._+/-]+$ ]] && _safe_cwd="$PWD"
     # Atomic write (temp + rename) prevents partial-read by a hook that fires
     # immediately at SessionStart. Trap registered only on successful write so
     # a failed mktemp does not delete a sibling session's wrapper file.
@@ -127,9 +137,9 @@ _vigil_run_with_logging() (
     # bridge marker the SessionStart hook drops for post-exec lookup.
     local _bridge_marker="$VIGIL_LOG_DIR/.bridge-$VIGIL_SESSION_ID"
     if _session_tmp="$(mktemp "$_sessions_dir/.wrapper-$_wrapper_pid.XXXXXX" 2>/dev/null)"; then
-        if printf '{\n  "vigil_session_id": "%s",\n  "log_dir": "%s",\n  "policy": "%s",\n  "launched_at": "%s",\n  "repo": "%s",\n  "branch": "%s"\n}\n' \
+        if printf '{\n  "vigil_session_id": "%s",\n  "log_dir": "%s",\n  "policy": "%s",\n  "launched_at": "%s",\n  "repo": "%s",\n  "branch": "%s",\n  "cwd": "%s"\n}\n' \
                 "$VIGIL_SESSION_ID" "$VIGIL_LOG_DIR" "$_safe_policy" "$_launched_at" \
-                "$_safe_repo" "$_safe_branch" \
+                "$_safe_repo" "$_safe_branch" "$_safe_cwd" \
                 > "$_session_tmp" \
             && mv -- "$_session_tmp" "$_session_file"; then
             trap 'rm -f -- "$_session_file" "$_bridge_marker"' EXIT

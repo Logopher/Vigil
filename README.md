@@ -88,7 +88,7 @@ The **default profile** is safe by construction: plan mode, the hard deny list, 
 
 `vigil-log` opens a session transcript in `$PAGER`. With no arguments it shows the most recent session; `vigil-log -1` shows the previous one (`-2` the one before that); `vigil-log 20260413` (or `2026-04-13`) opens the most recent transcript matching that date prefix.
 
-`vigil-log-prune` deletes old session logs from `~/vigil-logs/`. A `SessionStart` hook runs the same pruner automatically with defaults of 90 days and 2 GB total. For manual pruning, pass custom thresholds: `vigil-log-prune --older-than 30d --dry-run`.
+`vigil-log-prune` deletes old session logs from `~/vigil-logs/`. A `SessionStart` hook runs the same pruner automatically with defaults of 180 days and 2 GB total. For manual pruning, pass custom thresholds: `vigil-log-prune --older-than 30d --dry-run`.
 
 ## Optional: commit signing
 

@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Purpose
 
-This repo holds Vigil, my personal paranoid Claude Code configuration, also intended for deployment to friends' machines. ./install.sh copies the default profile directly into ~/.claude/ (a real directory) and installs the shell wrappers, policies, and a convenience symlink under ~/.config/vigil/. Edits here only take effect after re-running the installer — the copy is a deliberate firewall between repo state and live session behavior. Forward direction: the Dashboard codebase (~/code/dashboard/) will move into this repo as a long-lived v2 branch (GENERALIZATION.md "2026-05-13 calibration"; BACKLOG.md for the discrete next-session items); current repo contents are unchanged and will become the Claude Code adapter under the v2 umbrella.
+This repo holds Vigil, my personal default-deny Claude Code configuration, also intended for deployment to friends' machines. ./install.sh copies the default profile directly into ~/.claude/ (a real directory) and installs the shell wrappers, policies, and a convenience symlink under ~/.config/vigil/. Edits here only take effect after re-running the installer — the copy is a deliberate firewall between repo state and live session behavior. Forward direction: the Dashboard codebase (~/code/dashboard/) will move into this repo as a long-lived v2 branch (GENERALIZATION.md "2026-05-13 calibration"; BACKLOG.md for the discrete next-session items); current repo contents are unchanged and will become the Claude Code adapter under the v2 umbrella.
 
 Repo layout:
 

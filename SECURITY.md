@@ -1,6 +1,6 @@
 # Security
 
-Vigil is a paranoid-by-default configuration for Claude Code. Its value depends on its security properties being correct, so reports of weakness are welcome and taken seriously.
+Vigil is a default-deny configuration for Claude Code. Its value depends on its security properties being correct, so reports of weakness are welcome and taken seriously.
 
 ## Reporting a vulnerability
 

@@ -20,7 +20,7 @@ All other command denies (git mutations, network fetchers, runtimes, credential 
 
 ### Settings writes are hard-blocked
 
-A `PreToolUse` hook rejects `Write`, `Edit`, and `MultiEdit` calls targeting `~/.claude/settings.json` and `~/.claude/settings.local.json`. This is a hard deny — it cannot be overridden at the permission prompt. Enforced by `vigil-hook validate-settings-write`.
+A `PreToolUse` hook rejects `Write`, `Edit`, and `MultiEdit` calls targeting `~/.claude/settings.json`, `~/.claude/settings.local.json`, and `~/.claude/keybindings.json`. This is a hard deny — it cannot be overridden at the permission prompt. Enforced by `vigil-hook validate-settings-write`.
 
 ### Cross-project memory writes are blocked
 

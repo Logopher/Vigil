@@ -521,7 +521,7 @@ vigil-log() {
 
 # Prune ~/vigil-logs. Forwards args to scripts/prune-logs.py; run
 # `vigil-log-prune --help` for flags. The same script runs
-# automatically at SessionStart (90d age, 2G cap) via the profile
+# automatically at SessionStart (180d age, 2G cap) via the profile
 # hook; this wrapper is for manual on-demand pruning with custom
 # thresholds or --dry-run.
 vigil-log-prune() {

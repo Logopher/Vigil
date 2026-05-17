@@ -211,6 +211,17 @@ done
 # Default profile installs to two destinations: a bundle under
 # $DEST_DIR/profiles/default (the canonical source vigil set-default reads
 # from) and a rendered copy under $CLAUDE_DIR (what Claude Code loads).
+#
+# An earlier design had $DEST_DIR/profiles/default as a symlink to
+# $CLAUDE_DIR; vigil set-default permissive then rewrote the bundle's
+# content via the symlink and the swap-back was a no-op. The current
+# layout — bundle as a real directory, distinct from $CLAUDE_DIR —
+# makes swaps lossless in both directions. The deeper historical
+# reason for the original asymmetry: an earlier model had $CLAUDE_DIR
+# itself as a symlink to the active bundle, but Claude Code refuses
+# to operate against $CLAUDE_DIR-as-symlink, so the direction was
+# inverted on the default profile alone, producing the bug.
+#
 # {{PROFILE_DIR}} substitutes to the corresponding destination in each
 # pass. (No shipped template currently uses {{PROFILE_DIR}} — the default
 # template uses {{HOME}} — but the substitution machinery is kept for

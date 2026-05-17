@@ -56,6 +56,22 @@ Three policies ship:
 
 The secure posture should be the default and the easy path. Elevation — switching to `dev` or `yolo` — is a deliberate per-session choice, the way `sudo` is a deliberate per-command choice. A user who hits a permission block reconsiders whether the action is one they actually wanted; that pause is the feature, not the friction. If elevation is frequent for a given workflow, invoking `vigil-dev` (or `claude --settings …`) for that session restores the flow. The inverse — permissive by default, tighten when something goes wrong — means discovering the posture mismatch after damage is already done. The `permissive` profile is shipped as an opt-in alternative for users whose workflow consistently outgrows the default's friction, but the swap is an explicit `vigil set-default permissive` — never automatic — preserving the same "elevation is deliberate" property.
 
+### Why permissive ships as an opt-in alternative
+
+Claude Code's permission-layer semantics — deny beats allow, order-insensitive — mean policies layered on top of the default profile can only add restrictions, not remove them. `dev` and `yolo` are meaningful as "add restrictions on top of an already-strict baseline," but they cannot loosen the baseline a developer is starting from. A developer who wants less friction than the default profile imposes has no supported path within Claude Code's permission model.
+
+The `permissive` profile resolves this by lowering the profile-layer floor to just `rm`, `sudo`, and `vigil-install-review` (plus the Write/Edit/MultiEdit denies in `settings.local.json` that protect the session's enforcement-surface files — Vigil's config, shell rc files, `.gitconfig` — which are not posture choices). Within the permissive profile, `dev` and `yolo` express genuinely different postures because the policy's deny list and mode settings together determine session behavior, without the default profile's heavy baseline preempting them. The `strict` policy still serves both profiles: under default it's redundant overlay with the profile's denies; under permissive it reconstructs the heavy baseline on top of the lighter floor.
+
+The wrappers map to this two-profile model as follows:
+
+| | Default profile | Permissive profile |
+|---|---|---|
+| `vigil` / `vigil-strict` | profile's full deny list (the strict policy is redundant overlay) | permissive floor + strict policy → ≈ default-profile behavior |
+| `vigil-dev` | profile's full deny list dominates; `dev`'s allows are dead rules | permissive floor + dev policy → real dev posture |
+| `vigil-yolo` | profile's full deny list dominates; `yolo`'s loosening is moot | permissive floor + yolo policy → real yolo posture |
+
+`vigil-dev` and `vigil-yolo` are only behaviorally meaningful on the permissive profile. On the default profile they enter the loosened modes (`acceptEdits`, `bypassPermissions`) but the deny list they're stacked on top of remains the strict baseline, so a session that "should be" relaxed produces the same permission blocks the user would have hit under `vigil`. Users who want real elevation should swap to permissive first.
+
 ### When to reach for each policy
 
 - **Routine code writing in a trusted repo:** `vigil-dev`. Runs the `dev` policy with the working directory pinned to the git repository root (see [Session wrappers](#session-wrappers)).

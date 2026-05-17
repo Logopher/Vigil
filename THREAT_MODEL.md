@@ -20,7 +20,7 @@ Four adversary models in increasing order of threat. The tool's protections vary
 
 The user's own momentary lapse — approving a command without reading it, pasting a prompt that contains unvetted instructions, or running `vigil-dev` in the wrong directory. No malice involved.
 
-**Mitigations this tool provides:** strong. The deny list blocks bright-line destructive commands (`rm`, `sudo`, destructive git, network fetchers, SSH-family tools) regardless of operator approval. The default profile's plan mode surfaces every action before it runs. `vigil-dev` pins the working directory to the git root so an "in the wrong directory" mistake is caught by `git rev-parse` rather than by a prompt the user might accept absent-mindedly.
+**Mitigations this tool provides:** strong. The deny list blocks bright-line destructive commands (`rm`, `sudo`, destructive git, network fetchers, SSH-family tools) regardless of operator approval. Plan mode (which both shipped profiles enable) surfaces every action before it runs. `vigil-dev` pins the working directory to the git root so an "in the wrong directory" mistake is caught by `git rev-parse` rather than by a prompt the user might accept absent-mindedly.
 
 ### 2. Buggy agent
 
@@ -38,7 +38,7 @@ A document, web page, file content, or tool output contains instructions crafted
 - The sandbox layer is process-level (bubblewrap on Linux/WSL2, Seatbelt on macOS) and inherited by child processes; base64-decoded scripts and shell chains cannot bypass it for subprocess reads/writes/network. Verified working for both filesystem `denyRead` and network `allowedDomains: []` (see *Verification status* below).
 - Claude's own training declines to read sensitive paths (SSH keys, credential files) regardless of policy or sandbox state. Repeatedly observed during verification testing — an unplanned third defense layer that intercepts before the permission layer fires. This layer is Claude-specific; users running other models (via OpenCode or a future multi-agent port) should not assume equivalent model-level refusals.
 
-**Residual exposure:** any action the agent can take through allowed channels. Notable in the `dev` policy: `git add` + `git commit` enable commit poisoning; environment variable interpolation (e.g., `$AWS_SECRET_ACCESS_KEY` in a Write call) can exfiltrate credentials the permission layer protects at the filesystem level. Plan mode (strict default) narrows this — the operator sees each action before it runs — but at the cost of friction.
+**Residual exposure:** any action the agent can take through allowed channels. Notable in the `dev` policy: `git add` + `git commit` enable commit poisoning; environment variable interpolation (e.g., `$AWS_SECRET_ACCESS_KEY` in a Write call) can exfiltrate credentials the permission layer protects at the filesystem level. Plan mode narrows this — the operator sees each action before it runs — but at the cost of friction.
 
 ### 4. Malicious agent
 

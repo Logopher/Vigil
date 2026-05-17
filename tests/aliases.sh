@@ -400,4 +400,149 @@ else
     fail "vigil-log multi-word PAGER produced no output"
 fi
 
+# -----------------------------------------------------------------------------
+# vigil_set_default: covers the dirty-file refusal that runs symmetrically
+# for both profiles (per the bundle-redesign invariant — both bundles are
+# real directories distinct from ~/.claude/) and the --force override.
+#
+# Helper: lay out a fake $HOME shaped like a post-install tree with two
+# real profile bundles. The bundle files are deliberately distinct
+# between default and permissive so the test can assert which bundle's
+# content currently lives at ~/.claude/.
+seed_profile_home() {
+    local home="$1" active="${2:-default}"
+    mkdir -p "$home/.config/vigil/profiles/default/agents" \
+             "$home/.config/vigil/profiles/permissive/agents" \
+             "$home/.claude/agents"
+    printf '{"profile":"default"}\n'   > "$home/.config/vigil/profiles/default/settings.json"
+    printf 'default CLAUDE.md\n'       > "$home/.config/vigil/profiles/default/CLAUDE.md"
+    printf 'default template\n'        > "$home/.config/vigil/profiles/default/settings.local.template.json"
+    printf 'default architect\n'       > "$home/.config/vigil/profiles/default/agents/architect.md"
+    printf '{"profile":"permissive"}\n' > "$home/.config/vigil/profiles/permissive/settings.json"
+    printf 'permissive CLAUDE.md\n'    > "$home/.config/vigil/profiles/permissive/CLAUDE.md"
+    printf 'permissive template\n'     > "$home/.config/vigil/profiles/permissive/settings.local.template.json"
+    printf 'permissive architect\n'    > "$home/.config/vigil/profiles/permissive/agents/architect.md"
+    cp -r "$home/.config/vigil/profiles/$active/." "$home/.claude/"
+    printf '%s\n' "$active" > "$home/.config/vigil/active-profile"
+}
+# pgrep would otherwise find this very claude process and refuse the swap;
+# `lsof +D` is harmless against an empty fake $HOME but stubbing pgrep is
+# necessary. Shell function shadows the command for the rest of the file.
+pgrep() { return 1; }
+
+section "vigil set-default: clean swap default→permissive"
+fake_home=$(mktmp_dir)
+seed_profile_home "$fake_home" default
+HOME="$fake_home" vigil_set_default permissive >/dev/null 2>&1
+rc=$?
+if [[ $rc -eq 0 ]]; then
+    pass "swap succeeded"
+else
+    fail "expected swap to succeed (rc=$rc)"
+fi
+if [[ "$(cat "$fake_home/.claude/CLAUDE.md")" == "permissive CLAUDE.md" ]]; then
+    pass "~/.claude reflects permissive after swap"
+else
+    fail "~/.claude/CLAUDE.md did not switch to permissive"
+fi
+if [[ "$(cat "$fake_home/.config/vigil/active-profile")" == "permissive" ]]; then
+    pass "active-profile records permissive"
+else
+    fail "active-profile did not record permissive"
+fi
+# Bundle preservation invariant — the just-swapped-out default bundle
+# is untouched.
+if [[ "$(cat "$fake_home/.config/vigil/profiles/default/CLAUDE.md")" == "default CLAUDE.md" ]]; then
+    pass "default bundle survives the swap"
+else
+    fail "default bundle was modified by the swap"
+fi
+
+section "vigil set-default: clean swap permissive→default (reverse direction)"
+fake_home=$(mktmp_dir)
+seed_profile_home "$fake_home" permissive
+HOME="$fake_home" vigil_set_default default >/dev/null 2>&1
+rc=$?
+if [[ $rc -eq 0 ]]; then
+    pass "reverse swap succeeded"
+else
+    fail "expected reverse swap to succeed (rc=$rc)"
+fi
+if [[ "$(cat "$fake_home/.claude/CLAUDE.md")" == "default CLAUDE.md" ]]; then
+    pass "~/.claude reflects default after reverse swap"
+else
+    fail "~/.claude/CLAUDE.md did not switch back to default"
+fi
+if [[ "$(cat "$fake_home/.config/vigil/profiles/permissive/CLAUDE.md")" == "permissive CLAUDE.md" ]]; then
+    pass "permissive bundle survives the reverse swap"
+else
+    fail "permissive bundle was modified by the reverse swap"
+fi
+
+section "vigil set-default: dirty refusal when active=default (forward direction)"
+fake_home=$(mktmp_dir)
+seed_profile_home "$fake_home" default
+printf 'local hand-edit\n' > "$fake_home/.claude/CLAUDE.md"
+out=$(HOME="$fake_home" vigil_set_default permissive 2>&1)
+rc=$?
+if [[ $rc -ne 0 ]]; then
+    pass "swap refused on dirty file"
+else
+    fail "swap should have refused (rc=$rc)"
+fi
+if grep -q 'local edits detected' <<<"$out"; then
+    pass "refusal message mentions local edits"
+else
+    fail "refusal missing 'local edits detected' (out=$out)"
+fi
+if grep -qF "$fake_home/.claude/CLAUDE.md" <<<"$out"; then
+    pass "refusal lists the dirty path"
+else
+    fail "refusal did not list dirty path (out=$out)"
+fi
+# Live file untouched (refusal is a guard, not a destructive failure).
+if [[ "$(cat "$fake_home/.claude/CLAUDE.md")" == "local hand-edit" ]]; then
+    pass "live file unchanged after refusal"
+else
+    fail "refusal still modified the live file"
+fi
+
+section "vigil set-default: dirty refusal when active=permissive (reverse direction)"
+# The symmetric case: under the pre-redesign symlink layout this would
+# have silently succeeded because the "default bundle" pointed at
+# ~/.claude/. With both bundles real, the diff fires regardless of
+# which direction is being swapped.
+fake_home=$(mktmp_dir)
+seed_profile_home "$fake_home" permissive
+printf 'local hand-edit while on permissive\n' > "$fake_home/.claude/CLAUDE.md"
+out=$(HOME="$fake_home" vigil_set_default default 2>&1)
+rc=$?
+if [[ $rc -ne 0 ]]; then
+    pass "reverse-direction swap refused on dirty file"
+else
+    fail "reverse-direction swap should have refused (rc=$rc)"
+fi
+if grep -q 'local edits detected' <<<"$out"; then
+    pass "reverse-direction refusal message mentions local edits"
+else
+    fail "reverse-direction refusal missing 'local edits detected' (out=$out)"
+fi
+
+section "vigil set-default: --force overwrites the dirty file"
+fake_home=$(mktmp_dir)
+seed_profile_home "$fake_home" default
+printf 'local hand-edit\n' > "$fake_home/.claude/CLAUDE.md"
+HOME="$fake_home" vigil_set_default --force permissive >/dev/null 2>&1
+rc=$?
+if [[ $rc -eq 0 ]]; then
+    pass "--force swap succeeded over dirty file"
+else
+    fail "--force should override dirty refusal (rc=$rc)"
+fi
+if [[ "$(cat "$fake_home/.claude/CLAUDE.md")" == "permissive CLAUDE.md" ]]; then
+    pass "--force replaced the dirty file with the new bundle's content"
+else
+    fail "--force did not overwrite the dirty file"
+fi
+
 exit $failed

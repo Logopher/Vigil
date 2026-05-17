@@ -98,7 +98,7 @@ The session wrappers in `vigil-aliases.sh` re-run `filter-sandbox-denies.py` on 
 
 ### Why refuse rather than overwrite
 
-The default profile shares a directory (`~/.claude`) with Claude Code's own runtime state — credentials (`.credentials.json`), session history (`history.jsonl`, `sessions/`), file edit history (`file-history/`), cache, and per-project state. Automatic overwrite-on-reinstall would risk clobbering credentials and session history.
+Vigil installs into `~/.claude/`, Claude Code's own configuration directory. The files Vigil writes there — `settings.json`, `CLAUDE.md`, `settings.local.template.json`, `agents/` — are not Vigil-exclusive territory; they are user-editable Claude Code configuration files that the user may already have customized before installing Vigil, or may have customized between Vigil installs. Automatic overwrite-on-reinstall would silently replace those customizations. The same directory also contains Claude Code's runtime state (credentials, session history, file edit history, per-project state), which `install.sh` never writes into but a heuristic "wipe and reinstall" alternative could.
 
 The installer declines to distinguish "files we own" from "Claude Code's runtime state" heuristically, because heuristics here have a failure mode where the installer silently deletes something valuable. Refusing to run when conflicts exist forces the operator to inspect the state explicitly and move anything worth keeping before proceeding.
 

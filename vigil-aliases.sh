@@ -373,11 +373,11 @@ vigil_set_default() {
         return 0
     fi
 
-    # Diff check against current bundle.
-    # Skipped when current profile is "default": ~/.config/vigil/profiles/default
-    # is a symlink to ~/.claude/ so comparing live files against the bundle is
-    # comparing a file against itself — always identical regardless of edits.
-    if [[ "$current_profile" != "default" && $force -eq 0 ]]; then
+    # Diff check against current bundle. Fires symmetrically for both
+    # profiles: ~/.config/vigil/profiles/<name> is a real directory distinct
+    # from ~/.claude/, so comparing live files against the bundle catches
+    # local edits in either direction.
+    if [[ $force -eq 0 ]]; then
         current_bundle="$vigil_dir/profiles/$current_profile"
         dirty=()
         for f in settings.json CLAUDE.md settings.local.template.json; do

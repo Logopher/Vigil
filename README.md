@@ -60,8 +60,8 @@ cd ~/code/vigil
 
 The installer copies to two locations:
 
-- `~/.claude/` — the default profile. This is a real directory shared with Claude Code's runtime state (credentials, sessions, history); the name is external, not Vigil-specific.
-- `~/.config/vigil/` — the shell alias, the policy files, and a convenience symlink to the default profile.
+- `~/.claude/` — the active profile, rendered for Claude Code. This is a real directory shared with Claude Code's runtime state (credentials, sessions, history); the name is external, not Vigil-specific.
+- `~/.config/vigil/` — the shell alias, the policy files, the script library, and bundle copies of both profiles under `profiles/default/` and `profiles/permissive/`. The bundles are the canonical source `vigil set-default` reads from when switching the active profile.
 
 Add to your `~/.bashrc` (or equivalent):
 

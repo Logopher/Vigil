@@ -44,6 +44,15 @@ update_into() {
         VIGIL_UNSAFE_SKIP_SUDO=1 \
         bash "$REPO_DIR/update.sh" -y >/dev/null
 }
+# Same as update_into but captures stdout+stderr (caller greps for
+# manifest-layer messages like "Preserved user edits" or "no manifest
+# in backup"). Returns the captured text on stdout.
+update_into_capture() {
+    HOME="$1" \
+        VIGIL_HOOK_INSTALL_DIR="$1/dev-bin" \
+        VIGIL_UNSAFE_SKIP_SUDO=1 \
+        bash "$REPO_DIR/update.sh" -y 2>&1
+}
 
 check_present() {
     local label="$1" path="$2"
@@ -70,16 +79,101 @@ check_present "settings.json"      "$home/.claude/settings.json"
 check_present "vigil-aliases.sh"  "$home/.config/vigil/vigil-aliases.sh"
 
 # -----------------------------------------------------------------------------
-section "Bundled files refresh on update (stale local edits lost)"
+section "Bundled files refresh on update when user has not edited them"
+# Baseline: a clean install followed by an unmodified update leaves
+# every shipped file matching the repo source. This is the no-
+# divergence path through the manifest layer — diverged returns
+# nothing, reconcile is skipped, the existing cp-restore semantics
+# act on backup-vs-fresh and the fresh copy wins.
 home=$(mktmp)
 install_into "$home"
-echo "stale" > "$home/.claude/CLAUDE.md"
 update_into "$home"
 expected="$(cat "$REPO_DIR/profiles/default/CLAUDE.md")"
 if [[ "$(cat "$home/.claude/CLAUDE.md")" == "$expected" ]]; then
-    pass "CLAUDE.md refreshed from repo"
+    pass "CLAUDE.md refreshed from repo on no-edit update"
 else
     fail "CLAUDE.md not refreshed (still stale or differs)"
+fi
+if [[ ! -e "$home/.claude/CLAUDE.new.md" ]]; then
+    pass "no spurious .new.<ext> file on no-edit update"
+else
+    fail "unexpected CLAUDE.new.md produced on no-edit update"
+fi
+
+# -----------------------------------------------------------------------------
+section "User-edited Vigil file preserved; fresh version staged as .new.<ext>"
+# The manifest layer: a user-edited Vigil-installed file survives
+# update in place; the freshly-installed copy is staged adjacent so
+# the operator can merge manually.
+home=$(mktmp)
+install_into "$home"
+printf '%s\n' "user edit marker" > "$home/.claude/CLAUDE.md"
+out=$(update_into_capture "$home")
+check_contents "user edit preserved at live path" \
+    "$home/.claude/CLAUDE.md" "user edit marker"
+expected_fresh="$(cat "$REPO_DIR/profiles/default/CLAUDE.md")"
+check_contents "fresh content staged at CLAUDE.new.md" \
+    "$home/.claude/CLAUDE.new.md" "$expected_fresh"
+if grep -q 'Preserved user edits' <<<"$out" && \
+   grep -q '~/.claude/CLAUDE.md' <<<"$out" && \
+   grep -q '~/.claude/CLAUDE.new.md' <<<"$out"; then
+    pass "summary lists preserved file and staged .new.<ext> path"
+else
+    fail "summary missing or malformed (out=$out)"
+fi
+
+# -----------------------------------------------------------------------------
+section "Multi-divergence summary lists every preserved file"
+# Two edits across both install roots — summary must mention both.
+home=$(mktmp)
+install_into "$home"
+printf '%s\n' "claude edit" > "$home/.claude/CLAUDE.md"
+printf '%s\n' '{"d":"edit"}' > "$home/.config/vigil/policies/dev.json"
+out=$(update_into_capture "$home")
+check_contents "claude edit preserved" \
+    "$home/.claude/CLAUDE.md" "claude edit"
+check_contents "policy edit preserved" \
+    "$home/.config/vigil/policies/dev.json" '{"d":"edit"}'
+check_present "CLAUDE.new.md staged"     "$home/.claude/CLAUDE.new.md"
+check_present "dev.new.json staged"      "$home/.config/vigil/policies/dev.new.json"
+if grep -q 'CLAUDE.new.md' <<<"$out" && grep -q 'dev.new.json' <<<"$out"; then
+    pass "summary lists both staged paths"
+else
+    fail "summary missing one or both staged paths (out=$out)"
+fi
+n_line=$(grep -oE 'Preserved user edits to [0-9]+' <<<"$out" || true)
+if [[ "$n_line" == "Preserved user edits to 2" ]]; then
+    pass "summary count is accurate"
+else
+    fail "summary count wrong: '$n_line'"
+fi
+
+# -----------------------------------------------------------------------------
+section "No-manifest graceful degradation (first update post-feature)"
+# An install that predates the manifest feature has no
+# .install-manifest in $DEST_DIR. update.sh should warn on stderr and
+# fall through to the legacy gap-fill behavior (user edits clobbered)
+# without aborting. Simulated by deleting the manifest after install.
+home=$(mktmp)
+install_into "$home"
+rm -f "$home/.config/vigil/.install-manifest"
+printf '%s\n' "doomed" > "$home/.claude/CLAUDE.md"
+out=$(update_into_capture "$home")
+if grep -q 'no manifest in backup' <<<"$out"; then
+    pass "stderr note printed when backup has no manifest"
+else
+    fail "expected 'no manifest in backup' note (out=$out)"
+fi
+expected_fresh="$(cat "$REPO_DIR/profiles/default/CLAUDE.md")"
+if [[ "$(cat "$home/.claude/CLAUDE.md")" == "$expected_fresh" ]]; then
+    pass "without manifest, user edit clobbered (documented degradation)"
+else
+    fail "without manifest, expected legacy clobber behavior"
+fi
+if [[ ! -e "$home/.claude/CLAUDE.new.md" ]]; then
+    pass "no .new.<ext> staged on no-manifest path"
+else
+    fail "unexpected .new.<ext> on no-manifest path"
 fi
 
 # -----------------------------------------------------------------------------

@@ -15,24 +15,39 @@ Subcommands:
         filter-sandbox-denies.py calls so settings.json hashes reflect
         post-mutation content.
 
+    snapshot <backup-dir>
+        Copy the live manifest itself plus every live file it names
+        into <backup-dir>/manifest-snapshot/ (manifest at
+        <backup-dir>/manifest-snapshot/.install-manifest, files at
+        <backup-dir>/manifest-snapshot/{claude,config}/<rel>). Run by
+        update.sh BEFORE uninstall.sh so the divergence check below
+        has the user's edited files to compare against the recorded
+        hashes — uninstall.sh removes by name regardless of content,
+        so without this snapshot the user's edits would be destroyed
+        before move_contents could capture them. The snapshot subtree
+        is dedicated to install-manifest internal state so it does
+        not collide with update.sh's move_contents staging under
+        <backup-dir>/{claude,config}/.
+
     diverged <backup-dir>
-        Read <backup-dir>/config/.install-manifest, rehash the
-        corresponding backup file under <backup-dir>/{claude,config}/...,
-        and print absolute *live* paths whose backup hash differs from
-        the recorded hash. One path per line on stdout. Used by
-        update.sh between move_contents and install.sh to snapshot
-        user-edited Vigil files before the reinstall wipes them.
+        Read <backup-dir>/manifest-snapshot/.install-manifest, rehash
+        each entry's snapshot under
+        <backup-dir>/manifest-snapshot/{claude,config}/..., and print
+        absolute *live* paths whose snapshot hash differs from the
+        recorded hash. One path per line on stdout. Used by update.sh
+        after install.sh runs to identify which user-edited files
+        need preserving instead of overwriting.
 
     reconcile <backup-dir>
         For each diverged path: rename the freshly-installed file to
         <name>.new.<ext> (split on the LAST '.'; trailing '.new' if no
-        extension), copy the user-edited backup file into the original
-        location. Emits TSV '<preserved>\\t<staged>' per pair for
-        update.sh's end-of-run summary; the <staged> column is empty
-        if the live file did not exist post-install (user's edit is
-        the only copy). On any OSError, prints the failure to stderr
-        and exits non-zero so update.sh's existing rollback() trap
-        fires.
+        extension), copy the snapshotted user-edited file into the
+        original location. Emits TSV '<preserved>\\t<staged>' per pair
+        for update.sh's end-of-run summary; the <staged> column is
+        empty if the live file did not exist post-install (user's edit
+        is the only copy). On any OSError, prints the failure to
+        stderr and exits non-zero so update.sh's existing rollback()
+        trap fires.
 
     verify [--quiet]
         Exit 0 if every manifest entry matches the on-disk file; exit
@@ -213,23 +228,76 @@ def read_manifest(path: Path):
         yield parts[0], Path(parts[1])
 
 
-def backup_path_for(live_path: Path, backup_dir: Path):
-    """Map a live path to its corresponding backup-side path.
+def snapshot_root(backup_dir: Path) -> Path:
+    """Subtree under <backup-dir> reserved for install-manifest state.
 
-    update.sh splits the move-aside between $backup_dir/claude and
-    $backup_dir/config. Returns None for paths outside either root —
-    those are skipped silently (an entry the script itself didn't
-    write)."""
+    Separated from <backup-dir>/{claude,config}/ so update.sh's
+    move_contents can stage user-added files and Claude Code runtime
+    state under those names without colliding with the snapshot."""
+    return backup_dir / "manifest-snapshot"
+
+
+def backup_path_for(live_path: Path, backup_dir: Path):
+    """Map a live path to its corresponding snapshot path.
+
+    Returns None for paths outside either install root — those are
+    skipped silently (an entry the script itself didn't write)."""
+    root = snapshot_root(backup_dir)
     try:
         rel = live_path.relative_to(CLAUDE_DIR)
-        return backup_dir / "claude" / rel
+        return root / "claude" / rel
     except ValueError:
         pass
     try:
         rel = live_path.relative_to(DEST_DIR)
-        return backup_dir / "config" / rel
+        return root / "config" / rel
     except ValueError:
         return None
+
+
+def snapshot_manifest_path(backup_dir: Path) -> Path:
+    """Where the live manifest is copied during snapshot."""
+    return snapshot_root(backup_dir) / ".install-manifest"
+
+
+# ---- snapshot ------------------------------------------------------------
+
+def cmd_snapshot(argv) -> int:
+    """Mirror the live manifest and its entries into the backup tree.
+
+    update.sh calls this before uninstall.sh so the divergence check
+    has a content snapshot to work with — uninstall.sh removes by name
+    regardless of content, so otherwise the user's edits would be
+    destroyed before move_contents could capture them. Reads the live
+    manifest at MANIFEST_PATH; writes the snapshot under
+    <backup-dir>/manifest-snapshot/ to avoid colliding with
+    <backup-dir>/{claude,config}/ which update.sh uses for user
+    additions and runtime state."""
+    if not argv:
+        return die("usage: snapshot <backup-dir>")
+    backup_dir = Path(argv[0])
+    if not MANIFEST_PATH.is_file():
+        return die(f"no manifest at {MANIFEST_PATH}")
+    snap_manifest = snapshot_manifest_path(backup_dir)
+    snap_manifest.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        shutil.copy2(str(MANIFEST_PATH), str(snap_manifest))
+    except OSError as e:
+        sys.stderr.write(f"install-manifest: snapshot manifest copy failed: {e}\n")
+        return 1
+    for _hash, live_path in read_manifest(MANIFEST_PATH):
+        snap_path = backup_path_for(live_path, backup_dir)
+        if snap_path is None or not live_path.is_file():
+            continue
+        snap_path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            shutil.copy2(str(live_path), str(snap_path))
+        except OSError as e:
+            sys.stderr.write(
+                f"install-manifest: snapshot failed at {live_path}: {e}\n"
+            )
+            return 1
+    return 0
 
 
 # ---- diverged ------------------------------------------------------------
@@ -238,14 +306,14 @@ def cmd_diverged(argv) -> int:
     if not argv:
         return die("usage: diverged <backup-dir>")
     backup_dir = Path(argv[0])
-    manifest = backup_dir / "config" / ".install-manifest"
+    manifest = snapshot_manifest_path(backup_dir)
     if not manifest.is_file():
         return die(f"no manifest at {manifest}")
     for recorded_hash, live_path in read_manifest(manifest):
-        backup_path = backup_path_for(live_path, backup_dir)
-        if backup_path is None or not backup_path.is_file():
+        snap_path = backup_path_for(live_path, backup_dir)
+        if snap_path is None or not snap_path.is_file():
             continue
-        if sha256_file(backup_path) != recorded_hash:
+        if sha256_file(snap_path) != recorded_hash:
             sys.stdout.write(f"{live_path}\n")
     return 0
 
@@ -269,15 +337,15 @@ def cmd_reconcile(argv) -> int:
     if not argv:
         return die("usage: reconcile <backup-dir>")
     backup_dir = Path(argv[0])
-    manifest = backup_dir / "config" / ".install-manifest"
+    manifest = snapshot_manifest_path(backup_dir)
     if not manifest.is_file():
         return die(f"no manifest at {manifest}")
     pairs = []
     for recorded_hash, live_path in read_manifest(manifest):
-        backup_path = backup_path_for(live_path, backup_dir)
-        if backup_path is None or not backup_path.is_file():
+        snap_path = backup_path_for(live_path, backup_dir)
+        if snap_path is None or not snap_path.is_file():
             continue
-        if sha256_file(backup_path) == recorded_hash:
+        if sha256_file(snap_path) == recorded_hash:
             continue
         staged = staged_name_for(live_path)
         try:
@@ -285,7 +353,7 @@ def cmd_reconcile(argv) -> int:
                 if staged.exists():
                     staged.unlink()
                 shutil.move(str(live_path), str(staged))
-            shutil.copy2(str(backup_path), str(live_path))
+            shutil.copy2(str(snap_path), str(live_path))
         except OSError as e:
             sys.stderr.write(
                 f"install-manifest: reconcile failed at {live_path}: {e}\n"
@@ -328,6 +396,7 @@ USAGE = """\
 usage: install-manifest.py <subcommand> [args]
 subcommands:
   write                    record SHA-256 of every Vigil-installed file
+  snapshot <backup-dir>    mirror live manifest entries to backup tree
   diverged <backup-dir>    print live paths whose backup-side hash differs
   reconcile <backup-dir>   swap diverged paths to .new.<ext>; restore backups
   verify [--quiet]         exit 0 if all manifest entries match on disk
@@ -344,6 +413,8 @@ def main(argv) -> int:
     rest = argv[2:]
     if cmd == "write":
         return cmd_write(rest)
+    if cmd == "snapshot":
+        return cmd_snapshot(rest)
     if cmd == "diverged":
         return cmd_diverged(rest)
     if cmd == "reconcile":

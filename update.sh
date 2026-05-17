@@ -93,6 +93,22 @@ rollback() {
     shopt -u nullglob dotglob
     cp -r -- "$backup_dir/claude/." "$CLAUDE_DIR/" || rc=1
     cp -r -- "$backup_dir/config/." "$DEST_DIR/"   || rc=1
+    # Restore Vigil-installed files from the manifest snapshot too —
+    # uninstall.sh has already destroyed them by this point, and they
+    # are NOT in $backup_dir/{claude,config}/ because move_contents
+    # only captures what survived uninstall. The snapshot subtree is
+    # the only record of pre-update Vigil content, including any user
+    # edits to those files.
+    if [[ -d "$backup_dir/manifest-snapshot/claude" ]]; then
+        cp -r -- "$backup_dir/manifest-snapshot/claude/." "$CLAUDE_DIR/" || rc=1
+    fi
+    if [[ -d "$backup_dir/manifest-snapshot/config" ]]; then
+        cp -r -- "$backup_dir/manifest-snapshot/config/." "$DEST_DIR/" || rc=1
+    fi
+    if [[ -f "$backup_dir/manifest-snapshot/.install-manifest" ]]; then
+        cp -- "$backup_dir/manifest-snapshot/.install-manifest" \
+              "$DEST_DIR/.install-manifest" || rc=1
+    fi
     return $rc
 }
 
@@ -110,9 +126,32 @@ on_exit() {
 }
 trap on_exit EXIT
 
-"$REPO_DIR/uninstall.sh" -y
-
+# Snapshot the live manifest plus the live content of every manifest
+# entry before uninstall removes them. uninstall.sh removes Vigil-
+# installed files by name regardless of content, so a user-edited
+# CLAUDE.md or policy file is destroyed at uninstall time; move_contents
+# later sees only what uninstall left behind (user additions and
+# runtime state). The snapshot captures the divergence evidence into
+# $backup_dir/manifest-snapshot/ — deliberately separate from
+# $backup_dir/{claude,config}/ so it doesn't collide with the
+# move_contents staging below — so the post-install reconcile step
+# can swap the user's edit back into place.
 mkdir -p "$backup_dir/claude" "$backup_dir/config"
+snapshot_failed=0
+if [[ -f "$DEST_DIR/.install-manifest" ]]; then
+    # Tolerate snapshot failures (e.g. python3 missing, disk full) by
+    # falling through to the legacy gap-fill semantics — same outcome
+    # as an install that predates the manifest feature. The genuine
+    # failure modes that should abort the update fire later, inside
+    # install.sh or the reconcile call, where keep_backup=1 makes the
+    # rollback trap fire.
+    if ! python3 "$REPO_DIR/scripts/install-manifest.py" snapshot "$backup_dir"; then
+        snapshot_failed=1
+        echo "update.sh: snapshot failed; user-edited Vigil files will be clobbered this update" >&2
+    fi
+fi
+
+"$REPO_DIR/uninstall.sh" -y
 
 # Move every entry (including dotfiles) out of $src into $dst, then
 # rmdir the now-empty $src so install.sh's "refuses if exists" check
@@ -137,7 +176,44 @@ keep_backup=1
 move_contents "$CLAUDE_DIR" "$backup_dir/claude"
 move_contents "$DEST_DIR"   "$backup_dir/config"
 
+# Identify which Vigil-installed files the user edited since the last
+# install/update. install-manifest.py reads the snapshotted manifest
+# under $backup_dir/manifest-snapshot/ (captured before uninstall ran)
+# and prints absolute live paths whose snapshot content diverges from
+# the recorded hash. The list is empty on a clean update and on first
+# updates after an install that predates this feature (no snapshot →
+# manifest absent → stderr note, captured but tolerated).
+#
+# Captures via tempfile rather than `mapfile -t … < <(…)` for two
+# reasons: mapfile is bash 4+ (not on macOS system bash 3.2), and
+# process substitution swallows the python3 exit code so a crash in
+# diverged would silently skip reconcile instead of firing rollback.
+diverged_paths=()
+diverged_tmp=$(mktemp)
+if [[ -f "$backup_dir/manifest-snapshot/.install-manifest" ]]; then
+    python3 "$REPO_DIR/scripts/install-manifest.py" diverged "$backup_dir" > "$diverged_tmp"
+    while IFS= read -r line; do
+        [[ -n "$line" ]] && diverged_paths+=("$line")
+    done < "$diverged_tmp"
+else
+    echo "update.sh: no manifest in backup; user-edited Vigil files will be clobbered this update" >&2
+fi
+rm -f -- "$diverged_tmp"
+
 "$REPO_DIR/install.sh"
+
+# Reconcile diverged paths: for each file the user edited, rename the
+# freshly-installed copy to <name>.new.<ext> and restore the user's
+# edit into place. Emits TSV "<preserved>\t<staged>" per pair. Single
+# Python invocation so a mid-reconcile failure is one exit code from
+# bash's view — the existing rollback() trap then erases the partial
+# swap and restores pre-update state.
+reconciled_tsv=""
+if (( ${#diverged_paths[@]} > 0 )); then
+    reconciled_tsv=$(
+        python3 "$REPO_DIR/scripts/install-manifest.py" reconcile "$backup_dir"
+    )
+fi
 
 # Restore: backups fill gaps but never overwrite freshly installed
 # files. Bundled files always come from the new install (uninstall
@@ -159,3 +235,38 @@ cp -r "${CP_NO_OVERWRITE[@]}" "$backup_dir/config/." "$DEST_DIR/"
 
 keep_backup=0
 echo "Updated."
+
+# Repeat the snapshot-failure warning on stdout if it fired earlier
+# (the stderr line is easy to miss when stdout is redirected). The
+# downgrade is the same regardless: any user edits to Vigil files
+# were clobbered by the fresh install in this run.
+if [[ $snapshot_failed -eq 1 ]]; then
+    printf '\nNote: pre-update snapshot failed; any user edits to Vigil-managed\n'
+    printf 'files were clobbered by the fresh install in this run.\n'
+fi
+
+# Summarize preserved user edits, if any. Each line of reconciled_tsv
+# is "<preserved-path>\t<staged-path>" (staged is empty when the file
+# is no longer part of the fresh install, so the user's edit is the
+# only copy). The trailing nudge points the operator at the manifest
+# writer in case they want to accept their edit as the new baseline
+# and avoid the same flag on the next update.
+if [[ -n "$reconciled_tsv" ]]; then
+    n_preserved=$(printf '%s\n' "$reconciled_tsv" | wc -l | tr -d ' ')
+    printf '\nPreserved user edits to %d Vigil-managed file(s). Fresh versions are\n' "$n_preserved"
+    printf 'staged adjacent as <name>.new.<ext>:\n\n'
+    while IFS=$'\t' read -r preserved staged; do
+        display_preserved="${preserved/#$HOME/\~}"
+        if [[ -n "$staged" ]]; then
+            display_staged="${staged/#$HOME/\~}"
+            printf '  %s\n    (new at %s)\n' "$display_preserved" "$display_staged"
+        else
+            printf '  %s\n    (no staged copy — fresh install no longer ships this file)\n' "$display_preserved"
+        fi
+    done <<< "$reconciled_tsv"
+    printf '\nReview each .new.<ext> file. To accept the upstream version, replace\n'
+    printf 'the live file with it; to keep your edit, delete the .new.<ext> file.\n'
+    printf 'Either way, re-run the manifest writer or the next update will keep\n'
+    printf 'flagging the same divergence:\n'
+    printf '    python3 ~/.config/vigil/scripts/install-manifest.py write\n'
+fi

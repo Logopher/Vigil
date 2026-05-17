@@ -13,9 +13,11 @@
 # can't easily replace it. The sudo prompt fires once during install.
 #
 # {{HOME}} is substituted in policy and template files. {{PROFILE_DIR}} is
-# substituted in profile *.template.* files to the live profile directory
-# ($HOME/.claude for default, $HOME/.config/vigil/profiles/permissive for
-# permissive).
+# substituted in profile *.template.* files to the live profile directory.
+# The default profile is copied to two destinations and the substitution
+# happens once per destination: $HOME/.claude for the active-profile render
+# and $HOME/.config/vigil/profiles/default for the bundle copy. The
+# permissive profile is copied only to $HOME/.config/vigil/profiles/permissive.
 set -euo pipefail
 shopt -s nullglob
 
@@ -32,8 +34,8 @@ for arg in "$@"; do
 Usage: ./install.sh
 
 Copies Vigil into:
-  $(display_path "$DEST_DIR")/      (aliases, policies, scripts)
-  $(display_path "$CLAUDE_DIR")/                (default profile — real directory)
+  $(display_path "$DEST_DIR")/      (aliases, policies, scripts, profile bundles)
+  $(display_path "$CLAUDE_DIR")/                (active profile rendered for Claude Code)
   /usr/local/bin/vigil-hook         (dispatcher; sudo install for tamper-resistance)
 
 The installer refuses to run if any user-owned Vigil destination already exists.
@@ -206,25 +208,31 @@ for src in "$REPO_DIR/policies/"*; do
     fi
 done
 
-# Default profile installs directly into ~/.claude. {{PROFILE_DIR}}
-# substitutes to $CLAUDE_DIR in any *.template.* files copied into the
-# profile. (No shipped template currently uses {{PROFILE_DIR}} — the
-# default template uses {{HOME}} — but the substitution machinery is
-# kept for forward compatibility.)
-# Templates are kept alongside their generated output so that
-# vigil set-default can regenerate settings.local.json after a swap.
+# Default profile installs to two destinations: a bundle under
+# $DEST_DIR/profiles/default (the canonical source vigil set-default reads
+# from) and a rendered copy under $CLAUDE_DIR (what Claude Code loads).
+# {{PROFILE_DIR}} substitutes to the corresponding destination in each
+# pass. (No shipped template currently uses {{PROFILE_DIR}} — the default
+# template uses {{HOME}} — but the substitution machinery is kept for
+# forward compatibility.) Templates are kept alongside their generated
+# output so that vigil set-default can regenerate settings.local.json
+# after a swap.
+DEFAULT_BUNDLE_DEST="$DEST_DIR/profiles/default"
+mkdir -p "$DEFAULT_BUNDLE_DEST"
 src_profile="$REPO_DIR/profiles/default"
-for src in "$src_profile"/*; do
-    fname="$(basename "$src")"
-    if [[ -d "$src" ]]; then
-        cp -r "$src" "$CLAUDE_DIR/"
-    elif [[ "$fname" == *.template.* ]]; then
-        dest_name="${fname/.template./.}"
-        sed -e "s|{{PROFILE_DIR}}|$CLAUDE_DIR|g" -e "s|{{HOME}}|$HOME|g" "$src" > "$CLAUDE_DIR/$dest_name"
-        cp "$src" "$CLAUDE_DIR/$fname"
-    else
-        cp "$src" "$CLAUDE_DIR/$fname"
-    fi
+for dest in "$CLAUDE_DIR" "$DEFAULT_BUNDLE_DEST"; do
+    for src in "$src_profile"/*; do
+        fname="$(basename "$src")"
+        if [[ -d "$src" ]]; then
+            cp -r "$src" "$dest/"
+        elif [[ "$fname" == *.template.* ]]; then
+            dest_name="${fname/.template./.}"
+            sed -e "s|{{PROFILE_DIR}}|$dest|g" -e "s|{{HOME}}|$HOME|g" "$src" > "$dest/$dest_name"
+            cp "$src" "$dest/$fname"
+        else
+            cp "$src" "$dest/$fname"
+        fi
+    done
 done
 
 # Populate sandbox.filesystem.denyRead and denyWrite from the master
@@ -233,12 +241,12 @@ done
 # tmpfs-mount target to exist; a missing entry causes sandbox init to
 # fail closed for every subprocess. The script can be re-run anytime
 # to pick up newly created or removed paths. See the script header
-# for details.
+# for details. Run once per destination so the bundle's settings.json
+# also has live deny arrays — a session that loads the bundle directly
+# (CLAUDE_CONFIG_DIR override) gets the same sandbox posture as one
+# that loads ~/.claude.
 python3 "$DEST_DIR/scripts/filter-sandbox-denies.py" "$CLAUDE_DIR/settings.json"
-
-# Convenience symlink: lets users and docs reference the default profile
-# at the same path as other profiles under profiles/.
-ln -s "$CLAUDE_DIR" "$DEST_DIR/profiles/default"
+python3 "$DEST_DIR/scripts/filter-sandbox-denies.py" "$DEFAULT_BUNDLE_DEST/settings.json"
 
 # Permissive profile installs as a real directory under profiles/permissive.
 # {{PROFILE_DIR}} for this profile resolves to $DEST_DIR/profiles/permissive.
@@ -278,8 +286,9 @@ Installed:
   $DEST_DISPLAY/
   $CLAUDE_DISPLAY/
 
-Profiles:
-  default   — $CLAUDE_DISPLAY/  (active; strict deny list)
+Profiles (each a bundle under $DEST_DISPLAY/profiles/; the active one is also
+rendered into $CLAUDE_DISPLAY/ where Claude Code reads it):
+  default    — $DEST_DISPLAY/profiles/default/   (active; strict deny list)
   permissive — $DEST_DISPLAY/profiles/permissive/  (lighter floor for vigil-dev / vigil-yolo)
 
 Switch profiles with:

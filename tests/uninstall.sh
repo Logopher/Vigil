@@ -80,7 +80,16 @@ while IFS= read -r -d '' f; do
     rel="${f#"$REPO_DIR/scripts/"}"
     check_absent "scripts/$rel" "$home/.config/vigil/scripts/$rel"
 done < <(find "$REPO_DIR/scripts" -type f -print0)
-check_absent "profiles/default symlink" "$home/.config/vigil/profiles/default"
+# Default profile bundle: contents removed, directory tidied up.
+check_absent "bundle settings.json"               "$home/.config/vigil/profiles/default/settings.json"
+check_absent "bundle CLAUDE.md"                   "$home/.config/vigil/profiles/default/CLAUDE.md"
+check_absent "bundle settings.local.json"         "$home/.config/vigil/profiles/default/settings.local.json"
+check_absent "bundle settings.local.template.json" "$home/.config/vigil/profiles/default/settings.local.template.json"
+for src in "$REPO_DIR/profiles/default/agents/"*; do
+    check_absent "bundle agents/$(basename "$src")" \
+        "$home/.config/vigil/profiles/default/agents/$(basename "$src")"
+done
+check_absent "profiles/default directory" "$home/.config/vigil/profiles/default"
 check_absent "settings.json"       "$home/.claude/settings.json"
 check_absent "CLAUDE.md"           "$home/.claude/CLAUDE.md"
 check_absent "vigil-hook dispatcher" "$home/dev-bin/vigil-hook"

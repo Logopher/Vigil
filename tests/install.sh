@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Tier 2 end-to-end installer tests. Each case installs into an ephemeral
-# $HOME and asserts file layout, substitution completeness, symlink
-# direction, hook executable bits, and refusal-on-conflict behavior.
+# $HOME and asserts file layout, substitution completeness, bundle/live
+# parity, hook executable bits, and refusal-on-conflict behavior.
 set -uo pipefail
 shopt -s nullglob
 
@@ -137,18 +137,50 @@ else
 fi
 
 # -----------------------------------------------------------------------------
-section "Symlink direction: profiles/default -> ~/.claude"
-profile_symlink="$home/.config/vigil/profiles/default"
-if [[ -L "$profile_symlink" ]]; then
-    actual=$(readlink "$profile_symlink")
-    expected="$home/.claude"
-    if [[ "$actual" == "$expected" ]]; then
-        pass "profiles/default symlink targets ~/.claude"
-    else
-        fail "profiles/default -> '$actual' (expected '$expected')"
-    fi
+section "Default profile bundle layout"
+# Bundle at ~/.config/vigil/profiles/default/ must be a real directory
+# distinct from ~/.claude/ — the redesign's load-bearing invariant for
+# lossless vigil set-default swaps.
+profile_bundle="$home/.config/vigil/profiles/default"
+if [[ -L "$profile_bundle" ]]; then
+    fail "profiles/default should be a real directory, not a symlink"
+elif [[ -d "$profile_bundle" ]]; then
+    pass "profiles/default is a real directory"
 else
-    fail "profiles/default is not a symlink"
+    fail "profiles/default missing"
+fi
+
+# Files the bundle must contain (mirrors what's rendered into ~/.claude).
+check_file "bundle settings.json"               "$profile_bundle/settings.json"
+check_file "bundle CLAUDE.md"                   "$profile_bundle/CLAUDE.md"
+check_file "bundle settings.local.json"         "$profile_bundle/settings.local.json"
+check_file "bundle settings.local.template.json" "$profile_bundle/settings.local.template.json"
+if [[ -d "$profile_bundle/agents" ]]; then
+    pass "bundle agents/ present"
+else
+    fail "bundle agents/ missing"
+fi
+
+# Bundle and live tree must agree on the static files — this verifies
+# both copy passes ran and the second filter-sandbox-denies.py invocation
+# produced byte-equal sandbox arrays. settings.local.json is included
+# because no shipped template uses {{PROFILE_DIR}} — only {{HOME}} — so
+# the substituted outputs at both destinations should be identical. If
+# a future template introduces {{PROFILE_DIR}}, this check would need
+# to be removed or split per-destination.
+for f in settings.json CLAUDE.md settings.local.json settings.local.template.json; do
+    if [[ -f "$profile_bundle/$f" && -f "$home/.claude/$f" ]] && \
+       diff -q "$profile_bundle/$f" "$home/.claude/$f" >/dev/null 2>&1; then
+        pass "bundle $f byte-equal to ~/.claude/$f"
+    else
+        fail "bundle $f differs from ~/.claude/$f"
+    fi
+done
+if [[ -d "$profile_bundle/agents" && -d "$home/.claude/agents" ]] && \
+   diff -rq "$profile_bundle/agents" "$home/.claude/agents" >/dev/null 2>&1; then
+    pass "bundle agents/ byte-equal to ~/.claude/agents/"
+else
+    fail "bundle agents/ differs from ~/.claude/agents/"
 fi
 
 # ~/.claude must be a real directory, not a symlink.

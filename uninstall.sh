@@ -26,7 +26,7 @@ Removes files placed by install.sh:
   $(display_path "$DEST_DIR/pyszz.yml")
   $(display_path "$DEST_DIR/policies/")*.json
   $(display_path "$DEST_DIR/scripts/")*
-  $(display_path "$DEST_DIR/profiles/default") (symlink)
+  $(display_path "$DEST_DIR/profiles/default")
   $(display_path "$CLAUDE_DIR/CLAUDE.md")
   $(display_path "$CLAUDE_DIR/settings.json")
   $(display_path "$CLAUDE_DIR/agents/")<files installed by this repo>
@@ -106,28 +106,32 @@ while IFS= read -r -d '' f; do
     add_if_exists "$DEST_DIR/scripts/$rel"
 done < <(find "$REPO_DIR/scripts" -type f -print0)
 
-add_if_exists "$DEST_DIR/profiles/default"
+DEFAULT_BUNDLE_DEST="$DEST_DIR/profiles/default"
 
-# Profile contents inside $CLAUDE_DIR. For directories (agents/, hooks/),
-# only remove the specific files that exist in the repo — leave any
-# user-added files alone.
-for src in "$REPO_DIR/profiles/default/"*; do
-    fname="$(basename "$src")"
-    if [[ -d "$src" ]]; then
-        while IFS= read -r -d '' f; do
-            rel="${f#"$src"/}"
-            add_if_exists "$CLAUDE_DIR/$fname/$rel"
-        done < <(find "$src" -type f -print0)
-    elif [[ "$fname" == *.template.* ]]; then
-        add_if_exists "$CLAUDE_DIR/${fname/.template./.}"
-        add_if_exists "$CLAUDE_DIR/$fname"
-    else
-        add_if_exists "$CLAUDE_DIR/$fname"
-    fi
+# Default profile contents. Two destinations: the rendered copy under
+# $CLAUDE_DIR (mirrors what Claude Code reads) and the bundle copy under
+# $DEFAULT_BUNDLE_DEST (the canonical source vigil set-default reads from).
+# For directories (agents/, hooks/), only remove the specific files that
+# exist in the repo — leave any user-added files alone.
+for dest in "$CLAUDE_DIR" "$DEFAULT_BUNDLE_DEST"; do
+    for src in "$REPO_DIR/profiles/default/"*; do
+        fname="$(basename "$src")"
+        if [[ -d "$src" ]]; then
+            while IFS= read -r -d '' f; do
+                rel="${f#"$src"/}"
+                add_if_exists "$dest/$fname/$rel"
+            done < <(find "$src" -type f -print0)
+        elif [[ "$fname" == *.template.* ]]; then
+            add_if_exists "$dest/${fname/.template./.}"
+            add_if_exists "$dest/$fname"
+        else
+            add_if_exists "$dest/$fname"
+        fi
+    done
 done
 
 # Permissive profile contents. Mirrors the default loop above but targets
-# the bundle directory rather than $CLAUDE_DIR.
+# the permissive bundle only.
 PERMISSIVE_DEST="$DEST_DIR/profiles/permissive"
 for src in "$REPO_DIR/profiles/permissive/"*; do
     fname="$(basename "$src")"
@@ -228,7 +232,11 @@ empty_dirs+=("$DEST_DIR/scripts")
 for src in "$REPO_DIR/profiles/permissive/"*; do
     [[ -d "$src" ]] && empty_dirs+=("$PERMISSIVE_DEST/$(basename "$src")")
 done
-empty_dirs+=("$PERMISSIVE_DEST" "$DEST_DIR/profiles")
+empty_dirs+=("$PERMISSIVE_DEST")
+for src in "$REPO_DIR/profiles/default/"*; do
+    [[ -d "$src" ]] && empty_dirs+=("$DEFAULT_BUNDLE_DEST/$(basename "$src")")
+done
+empty_dirs+=("$DEFAULT_BUNDLE_DEST" "$DEST_DIR/profiles")
 for src in "$REPO_DIR/profiles/default/"*; do
     [[ -d "$src" ]] && empty_dirs+=("$CLAUDE_DIR/$(basename "$src")")
 done

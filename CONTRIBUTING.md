@@ -46,7 +46,7 @@ Non-trivial changes go through an `architect` planning pass and a `code-reviewer
 3. **Policy names** — `strict`, `dev`, `yolo`. Renaming or removing is breaking; tightening allow-lists inside a policy is `feat`; adding a new policy is `feat`.
 4. **Default profile deny baseline** — *loosening* the baseline deny list is breaking (users rely on it for safety). Tightening or adding new denies is `feat`; removing a deny is breaking.
 5. **Hook contract** — the `{{PROFILE_DIR}}` substitution, the `VIGIL_SESSION_ID` / `VIGIL_LOG_DIR` environment contract, and the `SessionStart` / `PreToolUse` / `PostToolUse` wiring names documented in `CLAUDE.md`.
-6. **Installer contracts** — `install.sh`, `update.sh`, and `uninstall.sh` CLI flags; the refuse-to-clobber behavior; which files each script touches.
+6. **Installer contracts** — `install.sh`, `update.sh`, and `uninstall.sh` CLI flags; the refuse-to-clobber behavior; which files each script touches; the install manifest at `~/.config/vigil/.install-manifest` and the `<name>.new.<ext>` staging convention `update.sh` uses to preserve user-edited Vigil files.
 7. **Commit-review gate** — `vigil-install-review`, the `.git/review-gate/` layout in consuming repos, and the pre-push hook's SHA-256 manifest check.
 
 *Not* public surface (changes here are never breaking): internal script names under `scripts/`, hook-script filenames inside a profile's `hooks/` directory, exact wording of prompts or error messages, log-line formats excluding the filename format above, and any variable name that isn't in the list above.

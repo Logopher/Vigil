@@ -161,26 +161,58 @@ else
     fail "bundle agents/ missing"
 fi
 
-# Bundle and live tree must agree on the static files — this verifies
+# Bundle and live tree must agree on the static files — verifies that
 # both copy passes ran and the second filter-sandbox-denies.py invocation
-# produced byte-equal sandbox arrays. settings.local.json is included
-# because no shipped template uses {{PROFILE_DIR}} — only {{HOME}} — so
-# the substituted outputs at both destinations should be identical. If
-# a future template introduces {{PROFILE_DIR}}, this check would need
-# to be removed or split per-destination.
+# produced equivalent sandbox arrays. The two destinations are treated
+# as equivalent: any occurrence of either profile prefix in file content
+# is normalized to a common placeholder before diffing, so a
+# {{PROFILE_DIR}} substitution that resolves differently per destination
+# still compares equal as long as the rest of the file matches. Literal
+# bash parameter expansion avoids the BRE metacharacter pitfalls of
+# feeding paths to sed. The two prefixes are passed explicitly rather
+# than captured from enclosing scope so the helper is safe to call from
+# later test sections that may rebind $home or $profile_bundle.
+profile_equiv() {
+    local file_a="$1" file_b="$2" prefix_a="$3" prefix_b="$4"
+    local a b
+    a="$(<"$file_a")"
+    b="$(<"$file_b")"
+    a="${a//"$prefix_a"/<PROFILE>}"
+    a="${a//"$prefix_b"/<PROFILE>}"
+    b="${b//"$prefix_a"/<PROFILE>}"
+    b="${b//"$prefix_b"/<PROFILE>}"
+    [[ "$a" == "$b" ]]
+}
 for f in settings.json CLAUDE.md settings.local.json settings.local.template.json; do
     if [[ -f "$profile_bundle/$f" && -f "$home/.claude/$f" ]] && \
-       diff -q "$profile_bundle/$f" "$home/.claude/$f" >/dev/null 2>&1; then
-        pass "bundle $f byte-equal to ~/.claude/$f"
+       profile_equiv "$profile_bundle/$f" "$home/.claude/$f" \
+                     "$profile_bundle" "$home/.claude"; then
+        pass "bundle $f equivalent to ~/.claude/$f (profile paths normalized)"
     else
         fail "bundle $f differs from ~/.claude/$f"
     fi
 done
-if [[ -d "$profile_bundle/agents" && -d "$home/.claude/agents" ]] && \
-   diff -rq "$profile_bundle/agents" "$home/.claude/agents" >/dev/null 2>&1; then
-    pass "bundle agents/ byte-equal to ~/.claude/agents/"
+if [[ -d "$profile_bundle/agents" && -d "$home/.claude/agents" ]]; then
+    bundle_set=$(cd "$profile_bundle/agents" && find . -type f | sort)
+    live_set=$(cd "$home/.claude/agents" && find . -type f | sort)
+    if [[ -z "$bundle_set" ]]; then
+        fail "bundle agents/ contains no files (nothing to compare)"
+    elif [[ "$bundle_set" != "$live_set" ]]; then
+        fail "bundle agents/ file set differs from ~/.claude/agents/"
+    else
+        agents_ok=1
+        while IFS= read -r rel; do
+            [[ -z "$rel" ]] && continue
+            if ! profile_equiv "$profile_bundle/agents/$rel" "$home/.claude/agents/$rel" \
+                              "$profile_bundle" "$home/.claude"; then
+                fail "bundle agents/$rel differs from ~/.claude/agents/$rel"
+                agents_ok=0
+            fi
+        done <<< "$bundle_set"
+        [[ $agents_ok -eq 1 ]] && pass "bundle agents/ equivalent to ~/.claude/agents/ (profile paths normalized)"
+    fi
 else
-    fail "bundle agents/ differs from ~/.claude/agents/"
+    fail "bundle agents/ or ~/.claude/agents/ missing"
 fi
 
 # ~/.claude must be a real directory, not a symlink.

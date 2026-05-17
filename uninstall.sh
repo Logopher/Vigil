@@ -91,6 +91,7 @@ add_if_exists "$DEST_DIR/vigil-aliases.sh"
 add_if_exists "$DEST_DIR/doctor.sh"
 add_if_exists "$DEST_DIR/pyszz.yml"
 add_if_exists "$DEST_DIR/active-profile"
+add_if_exists "$DEST_DIR/.install-manifest"
 
 for src in "$REPO_DIR/policies/"*; do
     fname="$(basename "$src")"

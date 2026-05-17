@@ -372,6 +372,113 @@ done
 [[ $hook_fail -eq 0 ]] && pass "hooks are executable"
 
 # -----------------------------------------------------------------------------
+section "Install manifest"
+# install.sh writes a SHA-256 manifest at ~/.config/vigil/.install-manifest
+# after the three filter-sandbox-denies.py calls, so update.sh can
+# detect user-edited Vigil files and stage the fresh version as
+# <name>.new.<ext> rather than clobbering the edit. Tests assert the
+# manifest exists, has the right mode, includes the expected files,
+# excludes runtime state, and matches on-disk hashes (so verify exits
+# 0 on a clean install).
+home=$(mktmp)
+install_into "$home"
+manifest="$home/.config/vigil/.install-manifest"
+
+if [[ -f "$manifest" ]]; then
+    pass "manifest written at ~/.config/vigil/.install-manifest"
+else
+    fail "manifest missing at $manifest"
+fi
+
+if [[ "$(stat -c '%a' "$manifest" 2>/dev/null || stat -f '%Lp' "$manifest")" == "644" ]]; then
+    pass "manifest mode is 0644"
+else
+    fail "manifest mode is not 0644 (got $(stat -c '%a' "$manifest" 2>/dev/null || stat -f '%Lp' "$manifest"))"
+fi
+
+# Known entries that install.sh writes — must all appear with absolute
+# paths (matching sha256sum -c output format). The list mirrors
+# CLAUDE_FILES in install-manifest.py plus a representative slice of
+# ~/.config/vigil/ entries; a drift between install.sh writes and the
+# inventory shows up as a missing-entry failure here.
+for relpath in \
+    ".claude/CLAUDE.md" \
+    ".claude/settings.json" \
+    ".claude/settings.local.json" \
+    ".claude/settings.local.template.json" \
+    ".claude/agents/architect.md" \
+    ".claude/agents/code-reviewer.md" \
+    ".config/vigil/vigil-aliases.sh" \
+    ".config/vigil/doctor.sh" \
+    ".config/vigil/policies/dev.json" \
+    ".config/vigil/policies/strict.json" \
+    ".config/vigil/policies/yolo.json" \
+    ".config/vigil/profiles/default/settings.json" \
+    ".config/vigil/profiles/default/CLAUDE.md" \
+    ".config/vigil/profiles/permissive/settings.json" \
+    ".config/vigil/profiles/permissive/CLAUDE.md"
+do
+    if grep -qF "  $home/$relpath" "$manifest"; then
+        pass "manifest includes $relpath"
+    else
+        fail "manifest missing entry for $relpath"
+    fi
+done
+
+# Excluded paths must NOT appear. All three are real files/dirs the
+# walker reaches; the manifest emitter must skip them by name.
+for excluded in \
+    "$home/.config/vigil/active-profile" \
+    "$home/.config/vigil/sessions" \
+    "$home/.config/vigil/.install-manifest"
+do
+    if grep -qF "  $excluded" "$manifest"; then
+        fail "manifest unexpectedly includes excluded path: $excluded"
+    else
+        pass "manifest excludes $(basename "$excluded")"
+    fi
+done
+
+# Hash for settings.json in the manifest must match the post-mutation
+# content (i.e. filter-sandbox-denies.py has already run when the
+# manifest was written). Recompute via python3 — universally available
+# in this codebase and avoids the sha256sum-vs-shasum platform split.
+expected_hash=$(python3 -c "
+import hashlib, sys
+h = hashlib.sha256()
+with open('$home/.claude/settings.json', 'rb') as f:
+    for chunk in iter(lambda: f.read(65536), b''):
+        h.update(chunk)
+sys.stdout.write(h.hexdigest())
+")
+manifest_hash=$(grep -F "  $home/.claude/settings.json" "$manifest" | awk '{print $1}')
+if [[ -n "$manifest_hash" && "$expected_hash" == "$manifest_hash" ]]; then
+    pass "manifest hash for ~/.claude/settings.json matches post-mutation content"
+else
+    fail "manifest hash for settings.json mismatch (expected=$expected_hash got=$manifest_hash)"
+fi
+
+# verify must exit 0 on a freshly installed tree.
+if HOME="$home" python3 "$home/.config/vigil/scripts/install-manifest.py" verify --quiet; then
+    pass "install-manifest.py verify exits 0 on clean install"
+else
+    fail "install-manifest.py verify failed on clean install"
+fi
+
+# Staged .new.<ext> files from a prior reconcile must not be hashed
+# into a fresh manifest write. Simulate by dropping a CLAUDE.new.md
+# beside the live CLAUDE.md, re-running write, and asserting the
+# staged file is excluded.
+printf '%s\n' "staged content" > "$home/.claude/CLAUDE.new.md"
+HOME="$home" python3 "$home/.config/vigil/scripts/install-manifest.py" write
+if grep -qF "  $home/.claude/CLAUDE.new.md" "$manifest"; then
+    fail "manifest unexpectedly includes staged .new.<ext> file"
+else
+    pass "staged .new.<ext> file excluded from manifest"
+fi
+rm -f -- "$home/.claude/CLAUDE.new.md"
+
+# -----------------------------------------------------------------------------
 section "Refusal: ~/.claude/settings.json already exists"
 # install.sh deliberately tolerates a bare ~/.claude/ directory so that
 # Claude Code runtime state can coexist with reinstallation. Specific

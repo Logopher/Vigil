@@ -276,6 +276,17 @@ if [[ ! -f "$DEST_DIR/active-profile" ]]; then
     printf 'default\n' > "$DEST_DIR/active-profile"
 fi
 
+# Record SHA-256 fingerprints of everything install.sh just wrote so a
+# later update.sh can detect which Vigil-managed files the user has
+# edited and preserve those edits instead of clobbering them. MUST come
+# after the three filter-sandbox-denies.py calls above so settings.json
+# hashes reflect post-mutation content; otherwise every update would
+# flag settings.json as "user-edited" on platforms where the master
+# deny tuples intersect with extant paths differently than at write
+# time. See scripts/install-manifest.py for the inventory and the
+# .new.<ext> staging convention update.sh uses to preserve divergence.
+python3 "$DEST_DIR/scripts/install-manifest.py" write
+
 # -----------------------------------------------------------------------------
 DEST_DISPLAY="$(display_path "$DEST_DIR")"
 CLAUDE_DISPLAY="$(display_path "$CLAUDE_DIR")"

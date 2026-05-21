@@ -78,6 +78,7 @@ The `.json` sidecar is written after each session and contains:
 
 ```json
 {
+  "schema_version": 1,
   "cwd": "/home/grault/code/claude-config",
   "git_branch": "main",
   "git_head": "<sha-at-session-start>",
@@ -97,11 +98,16 @@ The sidecar schema is a load-bearing external contract. Field names, types, and
 semantics above are stable; consumers (including the `vigil_sessions` SQLite
 materialization shipped in v1.5 and downstream reporting) rely on them.
 
-- **Additive changes are allowed.** New fields may be added; consumers must
-  tolerate unknown keys.
-- **Renames and type changes are breaking** and require a version bump (no
-  `schema_version` field exists today; the next breaking change is the trigger
-  to introduce one).
+- **`schema_version` is the contract version.** Currently `1`. Integer.
+  Consumers should assert on the major-version compatibility set they
+  support; unknown versions warrant skipping or warning, not silently
+  continuing. Pinned proactively (rather than waiting for a breaking
+  change) so additive evolution is observable to downstream consumers
+  from day one.
+- **Additive changes are allowed without bumping `schema_version`.** New
+  nullable fields may be added; consumers must tolerate unknown keys.
+- **Renames, type changes, and field removals are breaking** and require
+  a `schema_version` bump.
 - **Null and empty fields are part of the contract.** `commits_during_session`
   is `null` for non-git sessions; `harness_session_id` may be `null` for
   zero-tool-call sessions; `ccusage_jsonl` is an empty string when no JSONL

@@ -545,4 +545,26 @@ else
     fail "--force did not overwrite the dirty file"
 fi
 
+section "Sidecar writer emits schema_version field"
+# Source-level check: the inline Python writer in vigil-aliases.sh
+# constructs the sidecar dict literal with schema_version as the first key.
+# A functional test would require extracting the heredoc and re-invoking it;
+# the writer is deterministic, so checking the dict literal directly is
+# enough to catch regressions in the writer's contract field set.
+if grep -qE "^[[:space:]]*'schema_version':[[:space:]]+1," "$REPO_DIR/vigil-aliases.sh"; then
+    pass "vigil-aliases.sh writer emits schema_version: 1"
+else
+    fail "vigil-aliases.sh writer does not emit schema_version: 1"
+fi
+# Narrower anchors than a bare grep: require the JSON example block to
+# include schema_version AND the Stable contract subsection's bold-heading
+# bullet, so deletion of either surface fails the test rather than passing
+# because the field name happens to appear somewhere in the file.
+if grep -q '"schema_version": 1' "$REPO_DIR/ANALYTICS.md" \
+        && grep -q '\*\*`schema_version` is the contract version' "$REPO_DIR/ANALYTICS.md"; then
+    pass "ANALYTICS.md documents schema_version in JSON example and Stable contract bullet"
+else
+    fail "ANALYTICS.md missing schema_version in JSON example or Stable contract bullet"
+fi
+
 exit $failed

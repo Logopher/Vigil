@@ -235,6 +235,7 @@ elif end_head is not None:
 else:
     commits_during_session = None
 print(json.dumps({
+    'schema_version':         1,
     'cwd':                    sys.argv[1],
     'git_branch':             sys.argv[2],
     'git_head':               sys.argv[3],

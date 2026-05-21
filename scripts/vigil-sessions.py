@@ -327,6 +327,8 @@ def _append_run_log(
     tier2_passed: int,
     status: str,
     error: Optional[str],
+    legacy_no_schema_version: int = 0,
+    schema_version_mismatch: int = 0,
 ) -> None:
     runs_log.parent.mkdir(parents=True, exist_ok=True)
     record = {
@@ -336,6 +338,8 @@ def _append_run_log(
         "sessions_normalized": sessions_normalized,
         "tier1_passed": tier1_passed,
         "tier2_passed": tier2_passed,
+        "legacy_no_schema_version": legacy_no_schema_version,
+        "schema_version_mismatch": schema_version_mismatch,
         "error": error,
     }
     with runs_log.open("a", encoding="utf-8") as fh:
@@ -432,6 +436,14 @@ def _run(
     tier2_discard = 0
     db_upserts = 0
     mtime_skipped = 0
+    # Sidecars with no schema_version field — legacy sidecars from before the
+    # contract was pinned. Accepted with a one-shot warning (first occurrence
+    # only; the summary line carries the count).
+    legacy_no_schema_version = 0
+    # Sidecars whose schema_version is outside SUPPORTED_SIDECAR_CONTRACT_VERSIONS.
+    # Skipped per-file with an error so the operator sees which sidecars they
+    # are losing.
+    schema_version_mismatch = 0
 
     for path in sidecar_paths:
         # When materializing to a DB, skip sidecars whose mtime hasn't
@@ -456,6 +468,31 @@ def _run(
             sidecar = json.loads(path.read_text(encoding="utf-8"))
         except (json.JSONDecodeError, OSError) as exc:
             print(f"warning: skipping {path.name}: {exc}", file=sys.stderr)
+            continue
+
+        # Sidecar contract-version gate. Legacy sidecars (pre-pin) are
+        # accepted with a one-shot warning; unsupported versions are skipped
+        # per-file so the operator can act on each. The supported set lives
+        # in vigil_sessions_db so a future ingest version can widen it without
+        # touching every caller.
+        contract_version = sidecar.get("schema_version")
+        if contract_version is None:
+            if legacy_no_schema_version == 0:
+                print(
+                    f"warning: {path.name} has no schema_version "
+                    "(legacy sidecar); accepting. Subsequent legacy sidecars "
+                    "are counted in the summary line, not logged per-file.",
+                    file=sys.stderr,
+                )
+            legacy_no_schema_version += 1
+        elif contract_version not in vigil_sessions_db.SUPPORTED_SIDECAR_CONTRACT_VERSIONS:
+            supported = sorted(vigil_sessions_db.SUPPORTED_SIDECAR_CONTRACT_VERSIONS)
+            print(
+                f"error: skipping {path.name}: schema_version={contract_version!r} "
+                f"not in supported set {supported}",
+                file=sys.stderr,
+            )
+            schema_version_mismatch += 1
             continue
 
         started_utc = _sidecar_to_utc(sidecar.get("started_at", ""))
@@ -564,6 +601,16 @@ def _run(
         print(f"  tier1 discards: {reasons}", file=sys.stderr)
     if tier2_discard:
         print(f"  tier2 discards: {tier2_discard}", file=sys.stderr)
+    if legacy_no_schema_version:
+        print(
+            f"  schema_version legacy (no field, accepted): {legacy_no_schema_version}",
+            file=sys.stderr,
+        )
+    if schema_version_mismatch:
+        print(
+            f"  schema_version mismatch (skipped): {schema_version_mismatch}",
+            file=sys.stderr,
+        )
     if db_conn is not None:
         print(f"  db upserts: {db_upserts}", file=sys.stderr)
 
@@ -576,6 +623,8 @@ def _run(
         tier2_passed=tier2_passed,
         status="failed" if error_msg else "completed",
         error=error_msg,
+        legacy_no_schema_version=legacy_no_schema_version,
+        schema_version_mismatch=schema_version_mismatch,
     )
 
     return 1 if error_msg else 0

@@ -13,7 +13,18 @@ import sqlite3
 from typing import Optional
 
 
+# SQLite-side schema version. Drives PRAGMA user_version migrations on the
+# materialization DB. Distinct from SUPPORTED_SIDECAR_CONTRACT_VERSIONS
+# below — the two version axes (output DB shape vs. input sidecar shape)
+# evolve independently. Both constants live here as the central home for
+# schema-related versioning constants in this module's ecosystem.
 SCHEMA_VERSION = 1
+
+# Sidecar JSON contract versions this module's ingest accepts. Gates which
+# sidecar JSON shapes vigil-sessions.py knows how to read. Read by the
+# ingest loop, not by anything inside this module — placement here is by
+# convention (all schema constants in one place), not by reference.
+SUPPORTED_SIDECAR_CONTRACT_VERSIONS = frozenset({1})
 
 
 # v1 (initial): vigil_sessions table + indexes. total_tokens is computed as a

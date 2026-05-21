@@ -87,6 +87,7 @@ def run_script(log_dir: Path, db_path: Path, runs_log: Path) -> subprocess.Compl
 
 def make_sidecar(harness_id: str, cwd: str, jsonl_path: Path) -> dict:
     return {
+        "schema_version": 1,
         "cwd": cwd,
         "git_branch": "main",
         "git_head": "abc123",
@@ -230,6 +231,63 @@ with tempfile.TemporaryDirectory() as td:
     check('zero-tool session appears in stdout output',
           '20260426-090000-myrepo-main' in output_session_ids,
           f'(got {output_session_ids})')
+
+
+    section('schema_version: legacy sidecar accepted with warning, ingested')
+    legacy_log = td_path / 'legacy-logs'
+    legacy_log.mkdir()
+    legacy_db = td_path / 'legacy.db'
+    legacy_runs = td_path / 'legacy-runs.jsonl'
+    jsonl_l = td_path / 'ccusage-legacy.jsonl'
+    write_ccusage(jsonl_l, model='claude-sonnet-4-6', slug='legacy session')
+    legacy_sidecar = legacy_log / 'session-20260426-100000-myrepo-main.json'
+    legacy_dict = make_sidecar('uuid-legacy', '/home/x/code/myrepo', jsonl_l)
+    del legacy_dict['schema_version']  # legacy sidecar from before the pin
+    write_sidecar(legacy_sidecar, legacy_dict)
+
+    proc = run_script(legacy_log, legacy_db, legacy_runs)
+    check('script exited 0 (legacy is accepted)', proc.returncode == 0,
+          f'stderr: {proc.stderr}')
+    check('first-occurrence warning printed', 'legacy sidecar' in proc.stderr,
+          f'(stderr: {proc.stderr!r})')
+    check('summary counts legacy sidecar exactly once',
+          'schema_version legacy (no field, accepted): 1' in proc.stderr,
+          f'(stderr: {proc.stderr!r})')
+    conn = sqlite3.connect(str(legacy_db))
+    legacy_count = conn.execute(
+        "SELECT COUNT(*) FROM vigil_sessions WHERE harness_session_id='uuid-legacy'"
+    ).fetchone()[0]
+    check('legacy sidecar still upserted', legacy_count == 1,
+          f'(got {legacy_count})')
+    conn.close()
+
+    section('schema_version: unsupported version skipped with error')
+    mismatch_log = td_path / 'mismatch-logs'
+    mismatch_log.mkdir()
+    mismatch_db = td_path / 'mismatch.db'
+    mismatch_runs = td_path / 'mismatch-runs.jsonl'
+    jsonl_m = td_path / 'ccusage-mismatch.jsonl'
+    write_ccusage(jsonl_m, model='claude-sonnet-4-6', slug='mismatch session')
+    mismatch_sidecar = mismatch_log / 'session-20260426-110000-myrepo-main.json'
+    mismatch_dict = make_sidecar('uuid-mismatch', '/home/x/code/myrepo', jsonl_m)
+    mismatch_dict['schema_version'] = 99  # future version this ingest doesn't know
+    write_sidecar(mismatch_sidecar, mismatch_dict)
+
+    proc = run_script(mismatch_log, mismatch_db, mismatch_runs)
+    check('script exited 0 (skip-not-fail on unsupported version)',
+          proc.returncode == 0, f'stderr: {proc.stderr}')
+    check('error printed per file', 'schema_version=99' in proc.stderr,
+          f'(stderr: {proc.stderr!r})')
+    check('summary counts mismatch exactly once',
+          'schema_version mismatch (skipped): 1' in proc.stderr,
+          f'(stderr: {proc.stderr!r})')
+    conn = sqlite3.connect(str(mismatch_db))
+    mismatch_count = conn.execute(
+        "SELECT COUNT(*) FROM vigil_sessions WHERE harness_session_id='uuid-mismatch'"
+    ).fetchone()[0]
+    check('unsupported-version sidecar not upserted', mismatch_count == 0,
+          f'(got {mismatch_count})')
+    conn.close()
 
 
 sys.exit(1 if failed else 0)

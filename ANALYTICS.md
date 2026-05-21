@@ -70,7 +70,7 @@ started outside a git repository, or in a detached HEAD state, fall back to the
 timestamp-only filename format (`session-<timestamp>.{txt,json}`). Branch names are
 sanitized to `[a-zA-Z0-9._-]` — slashes become hyphens (e.g. `feat/foo` → `feat-foo`).
 
-Retention is 180 days and 2G total, enforced at session start by `hooks/prune-logs.sh`.
+Retention is 180 days and 2G total, enforced at session start by `vigil-hook prune-logs` (which delegates to `scripts/prune-logs.py`).
 
 ### Sidecar metadata
 

@@ -210,19 +210,35 @@ def cmd_log_tool_use():
         else:
             record['response'] = event_data.get('tool_response', {})
 
+    _append_tools_jsonl_record(log_dir, harness_session_id, record)
+    return 0
+
+
+def _append_tools_jsonl_record(log_dir, harness_session_id, record):
+    """Append one JSON record to tools-<harness_session_id>.jsonl.
+
+    Emits a schema_version meta record on first write so the tools-JSONL
+    contract is observable to readers. Atomic with file creation via
+    O_CREAT|O_EXCL: at most one writer creates the file and emits the meta
+    record; concurrent writers losing the race observe FileExistsError and
+    fall through to append-only. The meta and first event are written
+    together, so partial states (file exists but lacks the meta record)
+    are not reachable through this path. Silent on all OSErrors so a
+    caller (the validators, in particular) can't have its deny path
+    aborted by a log-write failure.
+
+    The meta record's `ts` is taken from `record['ts']` when present (so
+    the meta and the first event share a timestamp from the same write),
+    and falls back to the current UTC time when the caller didn't set one.
+    """
+    if not log_dir or not harness_session_id:
+        return
     try:
         os.makedirs(log_dir, exist_ok=True)
         log_path = os.path.join(log_dir, f'tools-{harness_session_id}.jsonl')
         record_line = json.dumps(record) + '\n'
-        # Emit a schema_version meta record on first write so the tools-JSONL
-        # contract is observable to readers. Atomic with file creation via
-        # O_CREAT|O_EXCL: at most one writer creates the file and emits the
-        # meta record; concurrent writers losing the race observe
-        # FileExistsError and fall through to append-only. The meta and
-        # first event are written together, so partial states (file exists
-        # but lacks the meta record) are not reachable through this path.
         meta_line = json.dumps({
-            'ts': record['ts'],
+            'ts': record.get('ts') or datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
             'event': 'meta',
             'schema_version': 1,
         }) + '\n'
@@ -241,7 +257,40 @@ def cmd_log_tool_use():
                 f.write(record_line)
     except OSError:
         pass
-    return 0
+
+
+def _record_denial(ctx, event_data, reason, target):
+    """Append a denial record to tools-<harness_session_id>.jsonl.
+
+    Called from validator subcommands just before they exit 2. Best-effort:
+    a missing log_dir or unloaded ctx means the denial is not recorded but
+    the deny itself still proceeds. When ctx is unavailable on the deny
+    path, prints a one-line stderr warning so the operator sees the
+    audit-recording gap rather than silently losing the denial signal.
+    The event field is "denied" — a new event-kind extending the existing
+    PreToolUse / PostToolUse vocabulary, documented in ANALYTICS.md.
+    """
+    if not isinstance(ctx, dict):
+        print(
+            f'vigil-hook {reason}: denial recorded only at exit code 2 '
+            f'(session context unavailable; tools-JSONL audit row was not written)',
+            file=sys.stderr,
+        )
+        return
+    log_dir = ctx.get('log_dir') or ''
+    vigil_session_id = _ctx_vigil_session_id(ctx)
+    harness_session_id = event_data.get('session_id', '')
+    record = {
+        'ts': datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
+        'vigil_session_id': vigil_session_id,
+        'harness_session_id': harness_session_id,
+        'event': 'denied',
+        'tool': event_data.get('tool_name', ''),
+        'tool_use_id': event_data.get('tool_use_id', ''),
+        'reason': reason,
+        'target': target,
+    }
+    _append_tools_jsonl_record(log_dir, harness_session_id, record)
 
 
 # ---------- validate-memory-write ----------
@@ -305,6 +354,7 @@ def cmd_validate_memory_write():
     if target_slug == expected_slug:
         return 0
 
+    _record_denial(ctx, event_data, 'validate_memory_write', file_path)
     decision = {
         'hookSpecificOutput': {
             'hookEventName': 'PreToolUse',
@@ -349,6 +399,12 @@ def cmd_validate_settings_write():
     if file_path not in protected:
         return 0
 
+    # Load session context only on the deny path — the validation itself
+    # doesn't need it, so loading earlier would waste work on the (more
+    # common) allow path.
+    harness_session_id = event_data.get('session_id', '')
+    ctx = _load_session_context(harness_session_id, os.getppid())
+    _record_denial(ctx, event_data, 'validate_settings_write', file_path)
     decision = {
         'hookSpecificOutput': {
             'hookEventName': 'PreToolUse',

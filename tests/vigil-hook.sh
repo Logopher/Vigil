@@ -66,6 +66,15 @@ expect_allow() { expect_exit "$1" 0 "$2" "$3"; }
 # =====================================================================
 # validate-settings-write
 # =====================================================================
+#
+# Payloads in this section intentionally omit `session_id`. The deny path
+# of cmd_validate_settings_write now loads session context to record the
+# denial; with no session_id, _load_session_context returns None and
+# _record_denial silently no-ops, so no side-effect writes touch the real
+# ~/vigil-logs/. Future additions to this section that supply a resolvable
+# session_id must sandbox HOME first (see the DEN_HOME pattern below) to
+# avoid leaving bridge-marker files and tools-JSONL writes in the real
+# home directory.
 
 section "validate-settings-write — denies"
 
@@ -329,6 +338,159 @@ rm -f -- "$py_err"
 HOME="$LTU_ORIG_HOME"
 export HOME
 rm -rf -- "$LTU_HOME"
+
+
+# =====================================================================
+# validators — denial recorded to tools-JSONL
+# =====================================================================
+#
+# Same in-repo-source rationale as the log-tool-use section above:
+# denial-recording is a new behavior added to scripts/vigil-hook, so
+# this section explicitly invokes $REPO_DIR/scripts/vigil-hook rather
+# than $VIGIL_HOOK (which prefers the installed binary). To exercise
+# the installed binary, set VIGIL_HOOK=/usr/local/bin/vigil-hook and
+# edit DEN_HOOK below.
+
+DEN_HOOK="$REPO_DIR/scripts/vigil-hook"
+
+DEN_ORIG_HOME="$HOME"
+DEN_HOME=$(mktemp -d)
+HOME="$DEN_HOME"
+export HOME
+mkdir -p "$HOME/.config/vigil/sessions"
+DEN_LOG_DIR="$DEN_HOME/vigil-logs"
+mkdir -p "$DEN_LOG_DIR"
+DEN_SID="eeeeeeee-eeee-4eee-eeee-eeeeeeeeeeee"
+
+printf '{"vigil_session_id":"test-vsid","log_dir":"%s","policy":"strict","launched_at":"2026-01-01T00:00:00Z","repo":"","branch":"","cwd":"/home/grault/code/foo"}\n' \
+    "$DEN_LOG_DIR" > "$HOME/.config/vigil/sessions/$DEN_SID.json"
+
+DEN_LOG="$DEN_LOG_DIR/tools-$DEN_SID.jsonl"
+
+section "validate-memory-write — denial appended to tools-JSONL"
+
+# Cross-project memory write (slug mismatch) — should deny and record.
+set +e
+printf '{"session_id":"%s","hook_event_name":"PreToolUse","tool_name":"Write","tool_use_id":"tu_deny_mem","tool_input":{"file_path":"%s/.claude/projects/-home-grault-code-bar/memory/note.md","content":"x"}}' \
+    "$DEN_SID" "$HOME" | "$DEN_HOOK" validate-memory-write >/dev/null 2>&1
+mem_rc=$?
+set -e
+
+if [[ "$mem_rc" -eq 2 ]]; then
+    pass "validate-memory-write exited 2 (denied)"
+else
+    fail "validate-memory-write expected exit 2, got $mem_rc"
+fi
+
+py_err=$(mktemp)
+if python3 -c "
+import json, sys
+with open('$DEN_LOG') as f:
+    lines = f.read().splitlines()
+denied = [json.loads(l) for l in lines if json.loads(l).get('event') == 'denied']
+if len(denied) != 1:
+    sys.exit('expected 1 denied record, got %d (lines=%r)' % (len(denied), lines))
+d = denied[0]
+required = {'ts', 'vigil_session_id', 'harness_session_id', 'event', 'tool', 'tool_use_id', 'reason', 'target'}
+missing = required - set(d.keys())
+if missing:
+    sys.exit('denied record missing keys: %s (got: %r)' % (sorted(missing), d))
+if d['tool'] != 'Write':
+    sys.exit('tool != Write: %r' % d)
+if d['tool_use_id'] != 'tu_deny_mem':
+    sys.exit('tool_use_id wrong: %r' % d)
+if d['reason'] != 'validate_memory_write':
+    sys.exit('reason wrong: %r' % d)
+if not d['target'].endswith('/memory/note.md'):
+    sys.exit('target wrong: %r' % d)
+" 2>"$py_err"; then
+    pass "denied record has full schema (tool, tool_use_id, reason, target, ids, ts)"
+else
+    fail "denied record malformed; got: $(cat "$DEN_LOG") | python stderr: $(cat "$py_err")"
+fi
+rm -f -- "$py_err"
+
+section "validate-settings-write — denial appended to tools-JSONL"
+
+set +e
+printf '{"session_id":"%s","hook_event_name":"PreToolUse","tool_name":"Write","tool_use_id":"tu_deny_set","tool_input":{"file_path":"%s/.claude/settings.json","content":"x"}}' \
+    "$DEN_SID" "$HOME" | "$DEN_HOOK" validate-settings-write >/dev/null 2>&1
+set_rc=$?
+set -e
+
+if [[ "$set_rc" -eq 2 ]]; then
+    pass "validate-settings-write exited 2 (denied)"
+else
+    fail "validate-settings-write expected exit 2, got $set_rc"
+fi
+
+py_err=$(mktemp)
+if python3 -c "
+import json, sys
+with open('$DEN_LOG') as f:
+    lines = f.read().splitlines()
+denied = [json.loads(l) for l in lines if json.loads(l).get('event') == 'denied']
+# Two denials now: validate_memory_write from prior test, validate_settings_write here.
+reasons = sorted(d['reason'] for d in denied)
+if reasons != ['validate_memory_write', 'validate_settings_write']:
+    sys.exit('expected both reasons, got: %r' % reasons)
+settings_denial = next(d for d in denied if d['reason'] == 'validate_settings_write')
+if settings_denial['tool_use_id'] != 'tu_deny_set':
+    sys.exit('settings tool_use_id wrong: %r' % settings_denial)
+if not settings_denial['target'].endswith('/.claude/settings.json'):
+    sys.exit('settings target wrong: %r' % settings_denial)
+" 2>"$py_err"; then
+    pass "settings denial appended alongside memory denial"
+else
+    fail "settings denial wrong; got: $(cat "$DEN_LOG") | python stderr: $(cat "$py_err")"
+fi
+rm -f -- "$py_err"
+
+section "validators — first denial writes the meta record too"
+
+# A fresh session (separate from the one above): the very first write to
+# the tools-JSONL is a denial. Verify the meta record is emitted just
+# like cmd_log_tool_use's first-write path does.
+DEN_SID2="ffffffff-ffff-4fff-ffff-ffffffffffff"
+printf '{"vigil_session_id":"test-vsid2","log_dir":"%s","policy":"strict","launched_at":"2026-01-01T00:00:00Z","repo":"","branch":"","cwd":"/home/grault/code/foo"}\n' \
+    "$DEN_LOG_DIR" > "$HOME/.config/vigil/sessions/$DEN_SID2.json"
+DEN_LOG2="$DEN_LOG_DIR/tools-$DEN_SID2.jsonl"
+
+set +e
+printf '{"session_id":"%s","hook_event_name":"PreToolUse","tool_name":"Write","tool_use_id":"tu_first","tool_input":{"file_path":"%s/.claude/settings.json","content":"x"}}' \
+    "$DEN_SID2" "$HOME" | "$DEN_HOOK" validate-settings-write >/dev/null 2>&1
+set -e
+
+py_err=$(mktemp)
+if python3 -c "
+import json, sys
+with open('$DEN_LOG2') as f:
+    lines = f.read().splitlines()
+if len(lines) != 2:
+    sys.exit('expected 2 lines (meta + denial), got %d' % len(lines))
+meta = json.loads(lines[0])
+if meta.get('event') != 'meta' or meta.get('schema_version') != 1:
+    sys.exit('first line is not meta: %r' % meta)
+den = json.loads(lines[1])
+if den.get('event') != 'denied':
+    sys.exit('second line is not denied: %r' % den)
+if den.get('reason') != 'validate_settings_write':
+    sys.exit('reason wrong: %r' % den)
+if den.get('tool_use_id') != 'tu_first':
+    sys.exit('tool_use_id wrong: %r' % den)
+if not den.get('target', '').endswith('/.claude/settings.json'):
+    sys.exit('target wrong: %r' % den)
+" 2>"$py_err"; then
+    pass "first denial to a fresh tools-JSONL emits meta record on line 1 and full denial on line 2"
+else
+    fail "meta-on-first-denial wrong; got: $(cat "$DEN_LOG2") | python stderr: $(cat "$py_err")"
+fi
+rm -f -- "$py_err"
+
+# Restore HOME before cleanup.
+HOME="$DEN_ORIG_HOME"
+export HOME
+rm -rf -- "$DEN_HOME"
 
 
 # =====================================================================

@@ -161,6 +161,33 @@ Consumers are expected to read the meta record first and assert on the
 major-version compatibility set they support; the `vigil-sessions.py`
 ingest gains this assertion in a follow-on commit.
 
+#### Denied records
+
+When `validate-memory-write` or `validate-settings-write` blocks a tool
+call (exit code 2), the harness skips the `PostToolUse` hook, so the
+denial would otherwise leave no trace. The validators emit a record
+into the same tools-JSONL before exiting:
+
+```json
+{
+  "ts": "<iso8601>",
+  "vigil_session_id": "<wrapper id>",
+  "harness_session_id": "<harness uuid>",
+  "event": "denied",
+  "tool": "<tool name>",
+  "tool_use_id": "<tool use id>",
+  "reason": "<validator name>",
+  "target": "<file_path that was being written>"
+}
+```
+
+`reason` is one of: `validate_memory_write`, `validate_settings_write`
+(the validator subcommand that produced the denial).
+
+The `event: "denied"` value is an extension of the existing
+`PreToolUse` / `PostToolUse` vocabulary. Existing readers that dispatch
+only on those two values ignore the denied records cleanly.
+
 #### Stable contract
 
 Field names, types, and `event` values are stable; consumers (the

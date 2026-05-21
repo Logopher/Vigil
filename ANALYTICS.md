@@ -161,6 +161,25 @@ Consumers are expected to read the meta record first and assert on the
 major-version compatibility set they support; the `vigil-sessions.py`
 ingest gains this assertion in a follow-on commit.
 
+#### Parent-message enrichment
+
+PostToolUse records carry an optional `parent_message_id` field — the
+`message.id` of the assistant turn that emitted the tool_use. Looked up
+at PostToolUse time by scanning the ccusage JSONL at the hook input's
+`transcript_path` field for an assistant entry whose
+`message.content[]` contains a `tool_use` block with the matching
+`tool_use_id`. Omitted when the lookup fails (missing or unreadable
+JSONL, no matching tool_use_id).
+
+Rationale: per-tool token attribution is not representable in the
+ccusage JSONL — `usage` is recorded once per assistant turn and covers
+all `tool_use` blocks in that turn together. Stamping
+`parent_message_id` hands downstream consumers the join key without
+forcing the v0 hook to invent an attribution policy that the underlying
+data doesn't support. To compute per-message or per-session cost,
+consumers read the ccusage JSONL once, build a `message_id → usage`
+map, and join via `parent_message_id`.
+
 #### Denied records
 
 When `validate-memory-write` or `validate-settings-write` blocks a tool

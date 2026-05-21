@@ -494,6 +494,127 @@ rm -rf -- "$DEN_HOME"
 
 
 # =====================================================================
+# log-tool-use — PostToolUse stamps parent_message_id from ccusage JSONL
+# =====================================================================
+#
+# Same in-repo-source rationale as the LTU and validator-denial sections
+# above. To exercise the installed binary, set VIGIL_HOOK and edit
+# PME_HOOK below.
+
+PME_HOOK="$REPO_DIR/scripts/vigil-hook"
+
+PME_ORIG_HOME="$HOME"
+PME_HOME=$(mktemp -d)
+HOME="$PME_HOME"
+export HOME
+mkdir -p "$HOME/.config/vigil/sessions"
+PME_LOG_DIR="$PME_HOME/vigil-logs"
+mkdir -p "$PME_LOG_DIR"
+PME_SID="11111111-1111-4111-1111-111111111111"
+PME_PROJ_DIR="$PME_HOME/.claude/projects/-home-grault-fixture"
+mkdir -p "$PME_PROJ_DIR"
+PME_TRANSCRIPT="$PME_PROJ_DIR/$PME_SID.jsonl"
+
+# Session JSON the hook will discover.
+printf '{"vigil_session_id":"test-vsid","log_dir":"%s","policy":"strict","launched_at":"2026-01-01T00:00:00Z","repo":"","branch":"","cwd":"/home/grault/code/foo"}\n' \
+    "$PME_LOG_DIR" > "$HOME/.config/vigil/sessions/$PME_SID.json"
+
+# Fixture ccusage JSONL: one user turn, then two assistant turns. The
+# matching tool_use_id appears on the SECOND assistant turn — verifies
+# the linear scan finds non-first matches without being confused by
+# unrelated tool_use blocks on earlier turns. Per-section tests below
+# rely on unique tool_use_ids to avoid stale-row collisions when re-using
+# the same accumulating tools-JSONL across sub-tests.
+cat > "$PME_TRANSCRIPT" <<'EOF'
+{"type":"user","message":{"role":"user","content":[{"type":"text","text":"hi"}]}}
+{"type":"assistant","message":{"id":"msg_FIXTURE_OTHER","role":"assistant","content":[{"type":"tool_use","id":"toolu_PME_other","name":"Read","input":{"file_path":"/etc/hostname"}}]}}
+{"type":"assistant","message":{"id":"msg_FIXTURE_PARENT","role":"assistant","content":[{"type":"tool_use","id":"toolu_PME_match","name":"Bash","input":{"command":"true"}}]}}
+EOF
+
+PME_LOG="$PME_LOG_DIR/tools-$PME_SID.jsonl"
+
+section "log-tool-use — PostToolUse stamps parent_message_id on match"
+
+printf '{"session_id":"%s","hook_event_name":"PostToolUse","tool_name":"Bash","tool_use_id":"toolu_PME_match","transcript_path":"%s","tool_response":{"stdout":"ok"},"duration_ms":7}' \
+    "$PME_SID" "$PME_TRANSCRIPT" | "$PME_HOOK" log-tool-use >/dev/null 2>&1
+
+py_err=$(mktemp)
+if python3 -c "
+import json, sys
+with open('$PME_LOG') as f:
+    records = [json.loads(l) for l in f.read().splitlines()]
+events = [r for r in records if r.get('event') == 'PostToolUse']
+if len(events) != 1:
+    sys.exit('expected 1 PostToolUse, got %d' % len(events))
+e = events[0]
+if e.get('parent_message_id') != 'msg_FIXTURE_PARENT':
+    sys.exit('parent_message_id wrong or missing: %r' % e)
+" 2>"$py_err"; then
+    pass "parent_message_id stamped from matching ccusage JSONL assistant turn (non-first match)"
+else
+    fail "parent_message_id not stamped; got: $(cat "$PME_LOG") | python stderr: $(cat "$py_err")"
+fi
+rm -f -- "$py_err"
+
+section "log-tool-use — parent_message_id omitted when transcript_path is missing"
+
+# Second tool_use_id, no transcript_path supplied. Lookup is skipped;
+# parent_message_id absent.
+printf '{"session_id":"%s","hook_event_name":"PostToolUse","tool_name":"Bash","tool_use_id":"toolu_PME_no_path","tool_response":{"stdout":"ok"},"duration_ms":3}' \
+    "$PME_SID" | "$PME_HOOK" log-tool-use >/dev/null 2>&1
+
+py_err=$(mktemp)
+if python3 -c "
+import json, sys
+with open('$PME_LOG') as f:
+    records = [json.loads(l) for l in f.read().splitlines()]
+events = [r for r in records
+          if r.get('event') == 'PostToolUse'
+          and r.get('tool_use_id') == 'toolu_PME_no_path']
+if len(events) != 1:
+    sys.exit('expected 1 matching PostToolUse, got %d' % len(events))
+if 'parent_message_id' in events[0]:
+    sys.exit('parent_message_id should be absent: %r' % events[0])
+" 2>"$py_err"; then
+    pass "parent_message_id omitted when transcript_path absent"
+else
+    fail "parent_message_id should be omitted; got: $(cat "$PME_LOG") | python stderr: $(cat "$py_err")"
+fi
+rm -f -- "$py_err"
+
+section "log-tool-use — parent_message_id omitted on tool_use_id miss"
+
+# Tool_use_id not present in the transcript. Lookup returns None;
+# parent_message_id absent.
+printf '{"session_id":"%s","hook_event_name":"PostToolUse","tool_name":"Bash","tool_use_id":"toolu_PME_no_match","transcript_path":"%s","tool_response":{"stdout":"ok"},"duration_ms":4}' \
+    "$PME_SID" "$PME_TRANSCRIPT" | "$PME_HOOK" log-tool-use >/dev/null 2>&1
+
+py_err=$(mktemp)
+if python3 -c "
+import json, sys
+with open('$PME_LOG') as f:
+    records = [json.loads(l) for l in f.read().splitlines()]
+events = [r for r in records
+          if r.get('event') == 'PostToolUse'
+          and r.get('tool_use_id') == 'toolu_PME_no_match']
+if len(events) != 1:
+    sys.exit('expected 1 matching PostToolUse, got %d' % len(events))
+if 'parent_message_id' in events[0]:
+    sys.exit('parent_message_id should be absent: %r' % events[0])
+" 2>"$py_err"; then
+    pass "parent_message_id omitted when tool_use_id is not in transcript"
+else
+    fail "parent_message_id should be omitted; got: $(cat "$PME_LOG") | python stderr: $(cat "$py_err")"
+fi
+rm -f -- "$py_err"
+
+# Restore HOME before cleanup.
+HOME="$PME_ORIG_HOME"
+export HOME
+rm -rf -- "$PME_HOME"
+
+
+# =====================================================================
 
 if [[ $failed -eq 0 ]]; then
     [[ "${VIGIL_TESTS_VERBOSE:-0}" == "1" ]] && printf '\nvigil-hook: all tests passed.\n'

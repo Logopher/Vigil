@@ -124,12 +124,15 @@ machine's timezone. `ended_at_git_head` is HEAD at session end; `commits_during_
 is the SHAs reachable from end-HEAD but not start-HEAD (newest-first), an empty list when
 HEAD didn't move, and `null` for non-git sessions or when the start- or end-HEAD failed
 to resolve. Together they let the SZZ join attribute an inducing commit to its session
-by exact SHA lookup. `harness_session_id` is the Claude Code session UUID, captured at
-session end by reading the first record of the per-tool-call log
-(`~/vigil-logs/tools-<vigil-session-id>.jsonl`); it doubles as the filename of the
-ccusage JSONL under `~/.claude/projects/<slug>/`, which is exactly what `ccusage_jsonl`
-points at. Sessions that made zero tool calls have no tools log; for those the writer
-falls back to a most-recent-mtime scan, which can alias under concurrent zero-tool
+by exact SHA lookup. `harness_session_id` is the Claude Code session UUID, recovered at
+session end from the `.bridge-<vigil_session_id>` marker file under `~/vigil-logs/`
+(written by the SessionStart hook once the harness assigns the UUID); it doubles
+as the filename of the per-tool-call log (`~/vigil-logs/tools-<harness_session_id>.jsonl`)
+and of the ccusage JSONL under `~/.claude/projects/<slug>/`, which is exactly what
+`ccusage_jsonl` points at. The writer falls back to a most-recent-mtime scan over
+`~/.claude/projects/` when the bridge marker is absent (e.g., SessionStart didn't fire,
+or claude crashed before the hook ran) or when no JSONL with that ID exists yet (e.g.,
+session ended before any assistant turn landed). The fallback can alias under concurrent
 sessions but is reliable for the typical workload.
 
 ## Algorithmic layer

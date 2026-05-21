@@ -135,6 +135,41 @@ or claude crashed before the hook ran) or when no JSONL with that ID exists yet 
 session ended before any assistant turn landed). The fallback can alias under concurrent
 sessions but is reliable for the typical workload.
 
+### Tools-JSONL
+
+Per-session newline-delimited JSON written by `vigil-hook log-tool-use`
+(invoked from the `PreToolUse` and `PostToolUse` hooks) to
+`~/vigil-logs/tools-<harness_session_id>.jsonl`. Each line is one JSON
+object; readers tolerate unknown keys and unknown `event` values.
+
+#### Meta record
+
+The first line of every new tools-JSONL is a meta record pinning the
+contract version:
+
+```json
+{"ts": "<iso8601>", "event": "meta", "schema_version": 1}
+```
+
+Atomic with file creation via `O_CREAT | O_EXCL`: at most one writer
+creates the file and emits the meta record; concurrent writers losing
+the race observe `FileExistsError` and fall through to append-only.
+The meta and first event are written together, so partial states (file
+exists but lacks the meta record) are not reachable through this path.
+
+Consumers are expected to read the meta record first and assert on the
+major-version compatibility set they support; the `vigil-sessions.py`
+ingest gains this assertion in a follow-on commit.
+
+#### Stable contract
+
+Field names, types, and `event` values are stable; consumers (the
+`summarize-sessions.py` aggregations, the `vigil_sessions` SQLite
+materialization, and any downstream reader) rely on them. Additive
+nullable fields and new `event` values may be added without bumping
+`schema_version`. Renames, type changes, and removal of existing fields
+or event values are breaking and require a bump.
+
 ## Algorithmic layer
 
 The deterministic tier on top of the raw logs. `scripts/run-pyszz.sh` and

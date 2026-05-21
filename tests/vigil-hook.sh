@@ -227,6 +227,111 @@ export HOME
 
 
 # =====================================================================
+# log-tool-use — schema_version meta record on first write
+# =====================================================================
+#
+# This section deliberately invokes the in-repo vigil-hook source rather
+# than the (potentially older) installed binary at /usr/local/bin. The
+# meta-record behavior under test was added to scripts/vigil-hook; until
+# the developer reinstalls (per CLAUDE.md, install.sh is operator-run),
+# the installed binary may not exhibit it. Using the in-repo source
+# means this test validates the repo's source-of-truth regardless of
+# installation lag. Trade-off: a post-install regression where the
+# installed binary diverges from the repo would not be caught by this
+# section. To exercise the installed binary against this section,
+# explicitly set VIGIL_HOOK=/usr/local/bin/vigil-hook and edit the
+# LTU_HOOK assignment below.
+
+LTU_HOOK="$REPO_DIR/scripts/vigil-hook"
+if [[ ! -x "$LTU_HOOK" ]]; then
+    fail "in-repo vigil-hook not executable: $LTU_HOOK"
+fi
+
+# Sandbox HOME for log-tool-use tests; the hook resolves session JSON via
+# os.path.expanduser('~/.config/vigil/sessions/<id>.json').
+LTU_ORIG_HOME="$HOME"
+LTU_HOME=$(mktemp -d)
+HOME="$LTU_HOME"
+export HOME
+mkdir -p "$HOME/.config/vigil/sessions"
+LTU_LOG_DIR="$LTU_HOME/vigil-logs"
+mkdir -p "$LTU_LOG_DIR"
+LTU_SID="dddddddd-dddd-4ddd-dddd-dddddddddddd"
+
+# log_dir is a real directory so the hook writes the tools-JSONL there.
+printf '{"vigil_session_id":"test-vsid","log_dir":"%s","policy":"strict","launched_at":"2026-01-01T00:00:00Z","repo":"","branch":"","cwd":"/home/grault/code/foo"}\n' \
+    "$LTU_LOG_DIR" > "$HOME/.config/vigil/sessions/$LTU_SID.json"
+
+LTU_LOG="$LTU_LOG_DIR/tools-$LTU_SID.jsonl"
+
+section "log-tool-use — first write emits meta record then event"
+
+printf '{"session_id":"%s","hook_event_name":"PreToolUse","tool_name":"Read","tool_use_id":"tu_1","tool_input":{"file_path":"/etc/hosts"}}' \
+    "$LTU_SID" | "$LTU_HOOK" log-tool-use >/dev/null 2>&1
+
+if [[ -f "$LTU_LOG" ]]; then
+    pass "tools-jsonl created on first event"
+else
+    fail "tools-jsonl not created at $LTU_LOG"
+fi
+
+# Use python json.loads in the test to avoid quoting fragility across
+# bash/grep whitespace variations.
+py_err=$(mktemp)
+CLEANUP_PY_ERR=("$py_err")
+if python3 -c "
+import json, sys
+with open('$LTU_LOG') as f:
+    lines = f.read().splitlines()
+if len(lines) < 2:
+    sys.exit('expected >=2 lines, got %d' % len(lines))
+meta = json.loads(lines[0])
+if meta.get('event') != 'meta':
+    sys.exit('first line event != meta: %r' % meta)
+if meta.get('schema_version') != 1:
+    sys.exit('first line schema_version != 1: %r' % meta)
+event = json.loads(lines[1])
+if event.get('event') != 'PreToolUse':
+    sys.exit('second line event != PreToolUse: %r' % event)
+" 2>"$py_err"; then
+    pass "first line is meta record with schema_version: 1; second is PreToolUse"
+else
+    fail "meta/event layout incorrect; got: $(cat "$LTU_LOG") | python stderr: $(cat "$py_err")"
+fi
+rm -f -- "$py_err"
+
+section "log-tool-use — subsequent writes append without duplicate meta"
+
+printf '{"session_id":"%s","hook_event_name":"PostToolUse","tool_name":"Read","tool_use_id":"tu_1","tool_response":{"text":"ok"},"duration_ms":12}' \
+    "$LTU_SID" | "$LTU_HOOK" log-tool-use >/dev/null 2>&1
+
+py_err=$(mktemp)
+if python3 -c "
+import json, sys
+with open('$LTU_LOG') as f:
+    lines = f.read().splitlines()
+metas = [l for l in lines if json.loads(l).get('event') == 'meta']
+if len(metas) != 1:
+    sys.exit('expected 1 meta record, got %d' % len(metas))
+if len(lines) != 3:
+    sys.exit('expected 3 total lines (meta + Pre + Post), got %d' % len(lines))
+if json.loads(lines[2]).get('event') != 'PostToolUse':
+    sys.exit('third line event != PostToolUse: %r' % json.loads(lines[2]))
+" 2>"$py_err"; then
+    pass "second event appended without duplicate meta record"
+else
+    fail "subsequent-write layout incorrect; got: $(cat "$LTU_LOG") | python stderr: $(cat "$py_err")"
+fi
+rm -f -- "$py_err"
+
+# Restore HOME before cleanup so a signal interrupting rm leaves HOME
+# pointing at the original directory, not the deleted sandbox.
+HOME="$LTU_ORIG_HOME"
+export HOME
+rm -rf -- "$LTU_HOME"
+
+
+# =====================================================================
 
 if [[ $failed -eq 0 ]]; then
     [[ "${VIGIL_TESTS_VERBOSE:-0}" == "1" ]] && printf '\nvigil-hook: all tests passed.\n'

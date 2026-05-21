@@ -213,8 +213,32 @@ def cmd_log_tool_use():
     try:
         os.makedirs(log_dir, exist_ok=True)
         log_path = os.path.join(log_dir, f'tools-{harness_session_id}.jsonl')
-        with open(log_path, 'a') as f:
-            f.write(json.dumps(record) + '\n')
+        record_line = json.dumps(record) + '\n'
+        # Emit a schema_version meta record on first write so the tools-JSONL
+        # contract is observable to readers. Atomic with file creation via
+        # O_CREAT|O_EXCL: at most one writer creates the file and emits the
+        # meta record; concurrent writers losing the race observe
+        # FileExistsError and fall through to append-only. The meta and
+        # first event are written together, so partial states (file exists
+        # but lacks the meta record) are not reachable through this path.
+        meta_line = json.dumps({
+            'ts': record['ts'],
+            'event': 'meta',
+            'schema_version': 1,
+        }) + '\n'
+        try:
+            # Position 0 is safe here because O_EXCL guarantees the file
+            # was empty at open time; no O_APPEND is needed for the single
+            # os.write below. Do not copy this open into a retry path —
+            # without O_EXCL, position 0 would silently overwrite data.
+            fd = os.open(log_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
+            try:
+                os.write(fd, (meta_line + record_line).encode())
+            finally:
+                os.close(fd)
+        except FileExistsError:
+            with open(log_path, 'a') as f:
+                f.write(record_line)
     except OSError:
         pass
     return 0
